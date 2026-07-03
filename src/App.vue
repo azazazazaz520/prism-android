@@ -3,6 +3,7 @@ import { onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTaskStore } from './composables/useTaskStore';
 import { useTheme } from './composables/useTheme';
+import { useAuth } from './composables/useAuth';
 
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 
@@ -10,8 +11,10 @@ const router = useRouter();
 const route = useRoute();
 const { loadAll, initSync } = useTaskStore();
 const { load: loadTheme } = useTheme();
+const { initAuth } = useAuth();
 
 onMounted(async () => {
+  await initAuth();
   await Promise.all([loadAll(), loadTheme()]);
   initSync();
   if (isTauri) {
