@@ -1,5 +1,21 @@
 import { ref } from 'vue';
-import { SignJWT } from 'jose';
+import { SignJWT, importJWK } from 'jose';
+
+/** 全局单例状态：所有 useAuth() 调用者共享同一组 ref */
+const token = ref<string>('');
+const isConfigured = ref(false);
+
+const STORAGE_KEY = 'prism_sync_token';
+const JWT_KEY = 'prism_sync_jwt';
+
+/** 从 localStorage 加载已有令牌（模块初始化时执行一次） */
+(function loadToken() {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    token.value = stored;
+    isConfigured.value = true;
+  }
+})();
 
 /**
  * 认证 composable：管理 Supabase 自定义 JWT 令牌
@@ -7,36 +23,23 @@ import { SignJWT } from 'jose';
  * 首版使用预共享 UUID 令牌实现零注册的设备识别。
  * UUID 通过 HS256 签名为 JWT（sub = UUID），注入 Supabase 客户端，
  * 使 Postgres 的 auth.uid() 返回该 UUID，配合 RLS 实现用户数据隔离。
+ *
+ * token / isConfigured 为模块级单例 ref，确保跨组件状态一致。
  */
 export function useAuth() {
-  const token = ref<string>('');
-  const isConfigured = ref(false);
-
-  const STORAGE_KEY = 'prism_sync_token';
-  const JWT_KEY = 'prism_sync_jwt';
-
-  /** 从 localStorage 加载已有令牌 */
-  function loadToken() {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      token.value = stored;
-      isConfigured.value = true;
-    }
-  }
-
-  /** 用 HS256 将 UUID 签名为 Supabase 兼容的 JWT */
+  /** 用 ES256 (ECC P-256) 将 UUID 签名为 Supabase 兼容的 JWT */
   async function signToken(uuid: string): Promise<string> {
-    const secret = import.meta.env.VITE_SUPABASE_JWT_SECRET;
-    if (!secret) {
-      throw new Error('VITE_SUPABASE_JWT_SECRET 未配置');
+    const privateKeyJson = import.meta.env.VITE_SUPABASE_JWT_PRIVATE_KEY;
+    if (!privateKeyJson) {
+      throw new Error('VITE_SUPABASE_JWT_PRIVATE_KEY 未配置');
     }
-    // Supabase JWT Secret 是 base64 编码的，需解码后作为签名密钥
-    const keyBytes = Uint8Array.from(atob(secret), (c) => c.charCodeAt(0));
+    const privateJwk = JSON.parse(privateKeyJson);
+    const key = await importJWK(privateJwk, 'ES256');
     const jwt = await new SignJWT({ sub: uuid, role: 'authenticated' })
-      .setProtectedHeader({ alg: 'HS256' })
+      .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid })
       .setIssuedAt()
       .setExpirationTime('10y')
-      .sign(keyBytes);
+      .sign(key);
     return jwt;
   }
 
@@ -47,10 +50,12 @@ export function useAuth() {
     try {
       const jwt = await signToken(newToken);
       localStorage.setItem(JWT_KEY, jwt);
+      console.log('[auth] JWT signed successfully, token:', newToken.slice(0, 8) + '...');
     } catch (e) {
-      console.error('JWT 签名失败:', e);
+      console.error('[auth] JWT 签名失败:', e);
     }
     isConfigured.value = true;
+    console.log('[auth] sync configured, isConfigured =', isConfigured.value);
   }
 
   /** 获取已签名的 JWT（用于 Supabase setSession） */
@@ -71,13 +76,9 @@ export function useAuth() {
     return crypto.randomUUID();
   }
 
-  // 初始化加载
-  loadToken();
-
   return {
     token,
     isConfigured,
-    loadToken,
     saveToken,
     getJwt,
     clearToken,
