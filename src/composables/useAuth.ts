@@ -30,11 +30,13 @@ export function useAuth() {
     if (!secret) {
       throw new Error('VITE_SUPABASE_JWT_SECRET 未配置');
     }
+    // Supabase JWT Secret 是 base64 编码的，需解码后作为签名密钥
+    const keyBytes = Uint8Array.from(atob(secret), (c) => c.charCodeAt(0));
     const jwt = await new SignJWT({ sub: uuid, role: 'authenticated' })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('10y')
-      .sign(new TextEncoder().encode(secret));
+      .sign(keyBytes);
     return jwt;
   }
 
