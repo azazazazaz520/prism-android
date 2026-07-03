@@ -25,9 +25,8 @@ function handleSave() {
 }
 
 function handleGenerate() {
-  emit('generate');
-  // 生成后显示输入框让用户确认
-  showInput.value = true;
+  const newToken = crypto.randomUUID();
+  inputToken.value = newToken;
 }
 </script>
 
