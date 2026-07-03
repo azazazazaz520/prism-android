@@ -177,6 +177,24 @@ const dailyCompletedIds = ref<string[]>([]);
 const filterDate = ref<string | null>(null);
 const selectedTags = ref<string[]>([]);
 
+/** LWW 合并纯函数：将远端任务合并到本地任务列表。
+ *  返回合并后的新数组，不修改原数组。
+ *  >= 而非 >：手动同步时远端优先，防止 DB 直接修改后 updated_at 未变导致漏更新。 */
+export function mergeTasksLWW(local: Task[], remote: Task[]): Task[] {
+  if (remote.length === 0) return local;
+
+  const merged = new Map(local.map((t) => [t.id, t]));
+
+  for (const rt of remote) {
+    const lt = merged.get(rt.id);
+    if (!lt || new Date(rt.updated_at) >= new Date(lt.updated_at)) {
+      merged.set(rt.id, rt);
+    }
+  }
+
+  return [...merged.values()].filter((t) => !t.is_deleted);
+}
+
 /** 任务看板 composable：核心数据 + 筛选 + CRUD + 同步 */
 export function useTaskStore() {
   const { isLoggedIn } = useAuth();
@@ -232,25 +250,19 @@ export function useTaskStore() {
     }
   }
 
-  /** LWW 合并远端任务到本地，强制全量拉取。
-   *  >= 而非 >：手动同步时远端优先，防止 DB 直接修改后 updated_at 未变导致漏更新。 */
+  /** LWW 合并远端任务到本地，强制全量拉取。 */
   async function pullAndMerge() {
     const remoteTasks = await pullTasks(true);
     if (remoteTasks.length === 0) return;
 
-    const localMap = new Map(tasks.value.map((t) => [t.id, t]));
-    let changed = false;
-
-    for (const rt of remoteTasks) {
-      const local = localMap.get(rt.id);
-      if (!local || new Date(rt.updated_at) >= new Date(local.updated_at)) {
-        localMap.set(rt.id, rt);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      tasks.value = [...localMap.values()].filter((t) => !t.is_deleted);
+    const merged = mergeTasksLWW(tasks.value, remoteTasks);
+    if (
+      merged.length !== tasks.value.length ||
+      !merged.every(
+        (t, i) => t.id === tasks.value[i]?.id && t.updated_at === tasks.value[i]?.updated_at,
+      )
+    ) {
+      tasks.value = merged;
     }
   }
 
