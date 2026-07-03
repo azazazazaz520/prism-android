@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { useTheme } from '../composables/useTheme';
-import { useAuth } from '../composables/useAuth';
 import SyncSetup from '../components/SyncSetup.vue';
 import ThemePicker from '../components/ThemePicker.vue';
 
 const { currentTheme, setTheme } = useTheme();
-const { user, isLoggedIn, isLoading, error } = useAuth();
 </script>
 
 <template>
@@ -13,7 +11,7 @@ const { user, isLoggedIn, isLoading, error } = useAuth();
     <!-- 同步设置 -->
     <section class="settings-section">
       <h2 class="section-title">跨设备同步</h2>
-      <SyncSetup :user="user" :is-logged-in="isLoggedIn" :is-loading="isLoading" :error="error" />
+      <SyncSetup />
     </section>
 
     <!-- 主题 -->
