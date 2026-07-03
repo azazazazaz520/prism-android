@@ -5,7 +5,7 @@ import SyncSetup from '../components/SyncSetup.vue';
 import ThemePicker from '../components/ThemePicker.vue';
 
 const { currentTheme, setTheme } = useTheme();
-const { token, isConfigured, saveToken, clearToken, generateToken } = useAuth();
+const { user, isLoggedIn, isLoading, error } = useAuth();
 </script>
 
 <template>
@@ -13,13 +13,7 @@ const { token, isConfigured, saveToken, clearToken, generateToken } = useAuth();
     <!-- 同步设置 -->
     <section class="settings-section">
       <h2 class="section-title">跨设备同步</h2>
-      <SyncSetup
-        :token="token"
-        :is-configured="isConfigured"
-        @save="saveToken"
-        @clear="clearToken"
-        @generate="generateToken"
-      />
+      <SyncSetup :user="user" :is-logged-in="isLoggedIn" :is-loading="isLoading" :error="error" />
     </section>
 
     <!-- 主题 -->

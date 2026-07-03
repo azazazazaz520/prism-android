@@ -1,87 +1,92 @@
-import { ref } from 'vue';
-import { SignJWT, importJWK } from 'jose';
+import { ref, computed } from 'vue';
+import { createClient, type SupabaseClient, type Session, type User } from '@supabase/supabase-js';
 
 /** 全局单例状态：所有 useAuth() 调用者共享同一组 ref */
-const token = ref<string>('');
-const isConfigured = ref(false);
+const session = ref<Session | null>(null);
+const user = ref<User | null>(null);
+const isLoading = ref(false);
+const error = ref<string | null>(null);
 
-const STORAGE_KEY = 'prism_sync_token';
-const JWT_KEY = 'prism_sync_jwt';
-
-/** 从 localStorage 加载已有令牌（模块初始化时执行一次） */
-(function loadToken() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    token.value = stored;
-    isConfigured.value = true;
-  }
-})();
+let supabase: SupabaseClient | null = null;
 
 /**
- * 认证 composable：管理 Supabase 自定义 JWT 令牌
+ * 认证 composable：Supabase Anonymous Sign-In
  *
- * 首版使用预共享 UUID 令牌实现零注册的设备识别。
- * UUID 通过 HS256 签名为 JWT（sub = UUID），注入 Supabase 客户端，
- * 使 Postgres 的 auth.uid() 返回该 UUID，配合 RLS 实现用户数据隔离。
+ * 启动时自动执行匿名登录，无需用户输入任何信息。
+ * JWT 由 Supabase 自动管理和刷新。
+ * Session 通过 persistSession 跨应用重启持久化。
  *
- * token / isConfigured 为模块级单例 ref，确保跨组件状态一致。
+ * 参考: https://supabase.com/docs/guides/auth/auth-anonymous
  */
 export function useAuth() {
-  /** 用 ES256 (ECC P-256) 将 UUID 签名为 Supabase 兼容的 JWT */
-  async function signToken(uuid: string): Promise<string> {
-    const privateKeyJson = import.meta.env.VITE_SUPABASE_JWT_PRIVATE_KEY;
-    if (!privateKeyJson) {
-      throw new Error('VITE_SUPABASE_JWT_PRIVATE_KEY 未配置');
+  const isLoggedIn = computed(() => !!session.value);
+
+  /** 懒初始化 Supabase 客户端 */
+  function getClient(): SupabaseClient {
+    if (!supabase) {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('VITE_SUPABASE_URL 或 VITE_SUPABASE_ANON_KEY 未配置');
+      }
+      supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: false,
+        },
+      });
     }
-    const privateJwk = JSON.parse(privateKeyJson);
-    const key = await importJWK(privateJwk, 'ES256');
-    const jwt = await new SignJWT({ sub: uuid, role: 'authenticated' })
-      .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid })
-      .setIssuedAt()
-      .setExpirationTime('10y')
-      .sign(key);
-    return jwt;
+    return supabase;
   }
 
-  /** 保存令牌到 localStorage，同时签名并存储 JWT */
-  async function saveToken(newToken: string) {
-    token.value = newToken;
-    localStorage.setItem(STORAGE_KEY, newToken);
+  /**
+   * 初始化认证：恢复已有会话 → 若无则执行匿名登录
+   * 在应用启动时调用一次
+   */
+  async function initAuth(): Promise<void> {
+    const client = getClient();
+    isLoading.value = true;
+    error.value = null;
+
     try {
-      const jwt = await signToken(newToken);
-      localStorage.setItem(JWT_KEY, jwt);
-      console.log('[auth] JWT signed successfully, token:', newToken.slice(0, 8) + '...');
+      // 尝试恢复已有会话
+      const { data: sessionData } = await client.auth.getSession();
+      if (sessionData.session) {
+        session.value = sessionData.session;
+        user.value = sessionData.session.user;
+        isLoading.value = false;
+        return;
+      }
+
+      // 无会话 → 自动匿名登录
+      const { data, error: signInError } = await client.auth.signInAnonymously();
+      if (signInError) throw signInError;
+
+      session.value = data.session;
+      user.value = data.session?.user ?? null;
     } catch (e) {
-      console.error('[auth] JWT 签名失败:', e);
+      const message = e instanceof Error ? e.message : '匿名登录失败';
+      error.value = message;
+      console.warn('[auth] anonymous sign-in failed:', message);
+      // 不抛出异常，允许离线使用
+    } finally {
+      isLoading.value = false;
     }
-    isConfigured.value = true;
-    console.log('[auth] sync configured, isConfigured =', isConfigured.value);
-  }
 
-  /** 获取已签名的 JWT（用于 Supabase setSession） */
-  function getJwt(): string | null {
-    return localStorage.getItem(JWT_KEY);
-  }
-
-  /** 清除令牌和 JWT */
-  function clearToken() {
-    token.value = '';
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(JWT_KEY);
-    isConfigured.value = false;
-  }
-
-  /** 生成新的 UUID v4 令牌 */
-  function generateToken(): string {
-    return crypto.randomUUID();
+    // 监听后续状态变化（token 刷新、登出等）
+    client.auth.onAuthStateChange((_event, newSession) => {
+      session.value = newSession;
+      user.value = newSession?.user ?? null;
+    });
   }
 
   return {
-    token,
-    isConfigured,
-    saveToken,
-    getJwt,
-    clearToken,
-    generateToken,
+    session,
+    user,
+    isLoggedIn,
+    isLoading,
+    error,
+    initAuth,
   };
 }
