@@ -80,10 +80,19 @@ fn default_theme() -> String {
 }
 
 /// 获取 Workspace 根目录
+/// 桌面端使用 ~/.prism-android，Android 端通过 set_workspace_dir 设置
+static WORKSPACE_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_workspace_dir(path: PathBuf) {
+    let _ = WORKSPACE_DIR.set(path);
+}
+
 pub fn get_workspace_dir() -> PathBuf {
-    let mut path = dirs::home_dir().unwrap_or_default();
-    path.push(".prism-android");
-    path
+    WORKSPACE_DIR.get().cloned().unwrap_or_else(|| {
+        let mut path = dirs::home_dir().unwrap_or_default();
+        path.push(".prism-android");
+        path
+    })
 }
 
 fn get_data_path() -> PathBuf {

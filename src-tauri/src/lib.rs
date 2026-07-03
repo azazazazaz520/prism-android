@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Mutex;
+use tauri::Manager;
 
 pub mod commands;
 pub mod store;
@@ -47,13 +48,24 @@ pub struct UpdateTaskArgs {
 /// 桌面端通过 main.rs 调用，Android 端通过 android_init 自动调用
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let (data, config) = store::initialize();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState {
-            data: Mutex::new(data),
-            config: Mutex::new(config),
-            notified_today: Mutex::new(HashSet::new()),
+        .setup(|app| {
+            // Android 上使用 app 专属数据目录，而非只读的 home_dir()
+            let workspace = app
+                .handle()
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| store::get_workspace_dir());
+            store::set_workspace_dir(workspace);
+
+            let (data, config) = store::initialize();
+            app.manage(AppState {
+                data: Mutex::new(data),
+                config: Mutex::new(config),
+                notified_today: Mutex::new(HashSet::new()),
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             // 任务命令
