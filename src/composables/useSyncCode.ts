@@ -199,24 +199,29 @@ export function useSyncCode() {
   /** 恢复已配对的 profile（启动时调用） */
   async function restoreProfile(): Promise<boolean> {
     const code = await getSyncCode();
+    console.log('[syncCode] restoreProfile sync_code:', code);
     if (!code) return false;
 
     const supabase = getSupabaseClient();
-    if (!supabase) return false;
 
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('id')
         .eq('sync_code', code)
         .single();
 
+      if (error) {
+        console.warn('[syncCode] restoreProfile query error:', error);
+        return false;
+      }
       if (profile) {
         setProfileId(profile.id);
+        console.log('[syncCode] restoreProfile set profileId:', profile.id);
         return true;
       }
-    } catch {
-      // profile 可能已被删除（sync code 残留）
+    } catch (e) {
+      console.warn('[syncCode] restoreProfile failed:', e);
     }
 
     return false;

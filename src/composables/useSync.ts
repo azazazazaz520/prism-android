@@ -58,6 +58,7 @@ export function useSync() {
   }
 
   function setProfileId(id: string | null) {
+    console.log('[sync] setProfileId:', id);
     currentProfileId.value = id;
   }
 
@@ -75,8 +76,12 @@ export function useSync() {
 
   async function pushTask(task: Task): Promise<void> {
     const uid = userId();
-    if (!uid) return;
+    if (!uid) {
+      console.warn('[sync] pushTask skipped: no userId');
+      return;
+    }
     const profileId = getProfileId();
+    console.log('[sync] pushTask profileId:', profileId, 'task:', task.title);
     const supabase = getSupabaseClient();
 
     if (!isOnline.value) {
