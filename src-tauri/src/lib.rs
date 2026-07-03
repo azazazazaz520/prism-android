@@ -75,6 +75,8 @@ pub fn run() {
             commands::config::set_reminder_minutes,
             commands::config::get_module_enabled,
             commands::config::set_module_enabled,
+            commands::config::get_sync_code,
+            commands::config::set_sync_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

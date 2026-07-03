@@ -48,3 +48,17 @@ pub fn set_module_enabled(
     config.module_enabled.insert(module_id, enabled);
     store::save_config(&config)
 }
+
+/// 获取当前同步码
+#[tauri::command]
+pub fn get_sync_code(state: tauri::State<AppState>) -> Option<String> {
+    state.config.lock().unwrap().sync_code.clone()
+}
+
+/// 设置同步码并持久化
+#[tauri::command]
+pub fn set_sync_code(state: tauri::State<AppState>, code: String) -> Result<(), String> {
+    let mut config = state.config.lock().unwrap();
+    config.sync_code = Some(code);
+    store::save_config(&config)
+}

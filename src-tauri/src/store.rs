@@ -62,6 +62,9 @@ pub struct ConfigStore {
     /// 模块启用状态（key=AppModule id, value=enabled）
     #[serde(default)]
     pub module_enabled: std::collections::HashMap<String, bool>,
+    /// 同步码，用于跨设备配对；None 表示尚未启用同步
+    #[serde(default)]
+    pub sync_code: Option<String>,
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -119,6 +122,7 @@ fn default_config_store() -> ConfigStore {
         theme: default_theme(),
         reminder_minutes: default_reminder_minutes(),
         module_enabled: std::collections::HashMap::new(),
+        sync_code: None,
     }
 }
 
