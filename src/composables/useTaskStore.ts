@@ -267,9 +267,9 @@ export function useTaskStore() {
         const idx = tasks.value.findIndex((t) => t.id === remoteTask.id);
         if (idx >= 0) {
           if (new Date(remoteTask.updated_at) > new Date(tasks.value[idx].updated_at)) {
-            tasks.value = tasks.value.map((t) =>
-              t.id === remoteTask.id ? remoteTask : t,
-            ).filter((t) => !t.is_deleted);
+            tasks.value = tasks.value
+              .map((t) => (t.id === remoteTask.id ? remoteTask : t))
+              .filter((t) => !t.is_deleted);
           }
         } else if (!remoteTask.is_deleted) {
           tasks.value = [...tasks.value, remoteTask];
@@ -330,7 +330,12 @@ export function useTaskStore() {
       // 通过 map 创建新对象和新数组引用，确保 Android WebView 响应式更新
       tasks.value = tasks.value.map((t) =>
         t.id === id
-          ? { ...t, completed: !t.completed, completed_at: !t.completed ? new Date().toISOString() : null, updated_at: new Date().toISOString() }
+          ? {
+              ...t,
+              completed: !t.completed,
+              completed_at: !t.completed ? new Date().toISOString() : null,
+              updated_at: new Date().toISOString(),
+            }
           : t,
       );
       // 推送到 Supabase
@@ -369,7 +374,9 @@ export function useTaskStore() {
           isDaily: task.is_daily,
         },
       });
-      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, title, updated_at: new Date().toISOString() } : t));
+      tasks.value = tasks.value.map((t) =>
+        t.id === id ? { ...t, title, updated_at: new Date().toISOString() } : t,
+      );
       // 推送到 Supabase
       if (isConfigured.value) {
         const updated = tasks.value.find((t) => t.id === id);
@@ -396,7 +403,9 @@ export function useTaskStore() {
           isDaily: task.is_daily,
         },
       });
-      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, tags, important, pinned, updated_at: new Date().toISOString() } : t));
+      tasks.value = tasks.value.map((t) =>
+        t.id === id ? { ...t, tags, important, pinned, updated_at: new Date().toISOString() } : t,
+      );
       allTags.value = await call<string[]>('get_all_tags');
       // 推送到 Supabase
       if (isConfigured.value) {

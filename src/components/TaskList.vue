@@ -97,16 +97,15 @@ function resetSwipe(taskId: string) {
     </div>
 
     <TransitionGroup name="task-list" tag="div" class="task-items">
-      <div
-        v-for="task in tasks"
-        :key="task.id"
-        class="task-row"
-      >
+      <div v-for="task in tasks" :key="task.id" class="task-row">
         <!-- 左滑露出的删除按钮 -->
         <button
           class="swipe-delete-btn"
           :class="{ visible: (swipeState[task.id] || 0) <= SWIPE_THRESHOLD }"
-          @click="emit('delete', task.id); resetSwipe(task.id)"
+          @click="
+            emit('delete', task.id);
+            resetSwipe(task.id);
+          "
         >
           <svg
             width="20"
@@ -131,87 +130,87 @@ function resetSwipe(taskId: string) {
           @touchmove="onTouchMove(task.id, $event)"
           @touchend="onTouchEnd(task.id)"
         >
-        <!-- 勾选按钮 -->
-        <button
-          v-if="task.is_daily"
-          class="check-btn"
-          :class="{ done: dailyCompletionsMap[task.id] }"
-          @click="emit('toggle-daily', task.id, todayStr())"
-        >
-          <svg
-            v-if="dailyCompletionsMap[task.id]"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+          <!-- 勾选按钮 -->
+          <button
+            v-if="task.is_daily"
+            class="check-btn"
+            :class="{ done: dailyCompletionsMap[task.id] }"
+            @click="emit('toggle-daily', task.id, todayStr())"
           >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </button>
-        <button
-          v-else
-          class="check-btn"
-          :class="{ done: task.completed }"
-          @click="emit('toggle', task.id)"
-        >
-          <svg
-            v-if="task.completed"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            <svg
+              v-if="dailyCompletionsMap[task.id]"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
+          <button
+            v-else
+            class="check-btn"
+            :class="{ done: task.completed }"
+            @click="emit('toggle', task.id)"
           >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </button>
+            <svg
+              v-if="task.completed"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
 
-        <!-- 任务内容 -->
-        <div class="task-content">
-          <template v-if="editingId === task.id">
-            <input
-              v-model="editTitle"
-              class="edit-input"
-              @keyup.enter="confirmEdit(task.id)"
-              @keyup.escape="cancelEdit"
-              @blur="confirmEdit(task.id)"
-            />
-          </template>
-          <template v-else>
-            <span class="task-title" @dblclick="startEdit(task.id, task.title)">
-              {{ task.title }}
-            </span>
-            <div class="task-meta">
-              <span v-if="task.due_date" class="meta-tag due">{{ task.due_date }}</span>
-              <span v-for="tag in task.tags" :key="tag" class="meta-tag">{{ tag }}</span>
-              <span v-if="task.is_daily" class="meta-tag daily">每日</span>
-            </div>
-          </template>
+          <!-- 任务内容 -->
+          <div class="task-content">
+            <template v-if="editingId === task.id">
+              <input
+                v-model="editTitle"
+                class="edit-input"
+                @keyup.enter="confirmEdit(task.id)"
+                @keyup.escape="cancelEdit"
+                @blur="confirmEdit(task.id)"
+              />
+            </template>
+            <template v-else>
+              <span class="task-title" @dblclick="startEdit(task.id, task.title)">
+                {{ task.title }}
+              </span>
+              <div class="task-meta">
+                <span v-if="task.due_date" class="meta-tag due">{{ task.due_date }}</span>
+                <span v-for="tag in task.tags" :key="tag" class="meta-tag">{{ tag }}</span>
+                <span v-if="task.is_daily" class="meta-tag daily">每日</span>
+              </div>
+            </template>
+          </div>
+
+          <!-- 删除按钮 -->
+          <button class="delete-btn" @click="emit('delete', task.id)">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
-
-        <!-- 删除按钮 -->
-        <button class="delete-btn" @click="emit('delete', task.id)">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
       </div>
     </TransitionGroup>
   </div>

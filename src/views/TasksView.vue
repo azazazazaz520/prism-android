@@ -98,7 +98,10 @@ function onPullEnd() {
     @touchend="onPullEnd"
   >
     <!-- 下拉刷新指示器 -->
-    <div class="pull-indicator" :style="{ height: pullDistance + 'px', opacity: pullDistance / 50 }">
+    <div
+      class="pull-indicator"
+      :style="{ height: pullDistance + 'px', opacity: pullDistance / 50 }"
+    >
       <span v-if="pullDistance > 50" class="pull-text">松开刷新</span>
       <span v-else class="pull-text">下拉刷新</span>
     </div>

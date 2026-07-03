@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicovrc/tauri-v2-schema/main/tauri.conf.json",
+  "productName": "Prism",
+  "version": "0.1.0",
+  "identifier": "com.prism.android",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1430",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Prism",
+        "width": 360,
+        "height": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "android": {
+      "minSdkVersion": 26
+    }
+  }
+}
