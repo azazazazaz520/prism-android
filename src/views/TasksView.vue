@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useTaskStore } from '../composables/useTaskStore';
-import { useSync } from '../composables/useSync';
 import DateStrip from '../components/DateStrip.vue';
 import TagChipBar from '../components/TagChipBar.vue';
 import TaskList from '../components/TaskList.vue';
@@ -28,8 +27,6 @@ const {
   toggleTag,
   addTag,
 } = useTaskStore();
-
-const { syncStatus } = useSync();
 
 onMounted(() => {
   loadAll();
