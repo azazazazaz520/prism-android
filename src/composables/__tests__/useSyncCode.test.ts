@@ -44,6 +44,7 @@ let mockUser: any = { id: 'test-user-id' };
 let mockIsLoggedIn = true;
 vi.mock('../useAuth', () => ({
   useAuth: () => ({ user: { value: mockUser }, isLoggedIn: { value: mockIsLoggedIn } }),
+  getSupabaseClient: () => ({ from: mockSupabaseFrom }),
 }));
 
 let mockProfileId: string | null = null;

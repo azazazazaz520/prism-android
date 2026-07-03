@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import { useSync } from './useSync';
-import { useAuth } from './useAuth';
-import { createClient } from '@supabase/supabase-js';
+import { useAuth, getSupabaseClient } from './useAuth';
 
 /** 检测是否在 Tauri 环境 */
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
@@ -38,25 +37,16 @@ export function useSyncCode() {
   const { user, isLoggedIn } = useAuth();
   const { setProfileId, getProfileId } = useSync();
 
-  /** 获取伪随机 UUID（不依赖 crypto.randomUUID，兼容 Android WebView） */
+  /** 获取伪随机 UUID */
   function generateUUID(): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    // Fallback for older environments
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
       const v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
-  }
-
-  /** 获取 Supabase 客户端（用于 profile 查询） */
-  function getSupabase() {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) return null;
-    return createClient(supabaseUrl, supabaseKey);
   }
 
   /** 从 Rust config 读取已保存的同步码 */
@@ -82,7 +72,7 @@ export function useSyncCode() {
 
     try {
       const code = generateUUID();
-      const supabase = getSupabase();
+      const supabase = getSupabaseClient();
       if (!supabase) throw new Error('Supabase 客户端未初始化');
 
       // 创建 profile
@@ -126,7 +116,7 @@ export function useSyncCode() {
     pairError.value = null;
 
     try {
-      const supabase = getSupabase();
+      const supabase = getSupabaseClient();
       if (!supabase) throw new Error('Supabase 客户端未初始化');
 
       // 查找 profile
@@ -175,7 +165,7 @@ export function useSyncCode() {
 
   /** 将本地任务批量关联到 profile 并推送到 Supabase */
   async function mergeLocalToProfile(profileId: string): Promise<void> {
-    const supabase = getSupabase();
+    const supabase = getSupabaseClient();
     if (!supabase || !user.value) return;
 
     try {
@@ -211,7 +201,7 @@ export function useSyncCode() {
     const code = await getSyncCode();
     if (!code) return false;
 
-    const supabase = getSupabase();
+    const supabase = getSupabaseClient();
     if (!supabase) return false;
 
     try {
