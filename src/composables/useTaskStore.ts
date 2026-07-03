@@ -1,5 +1,7 @@
 import { ref, computed } from 'vue';
 import type { Task } from '../types';
+import { useSync } from './useSync';
+import { useAuth } from './useAuth';
 
 /** 检测是否在 Tauri 环境 */
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
@@ -180,8 +182,10 @@ const dailyCompletedIds = ref<string[]>([]);
 const filterDate = ref<string | null>(null);
 const selectedTags = ref<string[]>([]);
 
-/** 任务看板 composable：核心数据 + 筛选 + CRUD 操作 */
+/** 任务看板 composable：核心数据 + 筛选 + CRUD 操作 + 同步 */
 export function useTaskStore() {
+  const { isConfigured } = useAuth();
+  const { pushTask, pullTasks, subscribeToChanges } = useSync();
   // ── 计算属性 ──────────────────────────────
 
   const dailyCompletionsMap = computed(() => {
@@ -216,11 +220,67 @@ export function useTaskStore() {
 
   // ── 数据加载 ──────────────────────────────
 
-  /** 加载所有任务和标签数据 */
+  /** 加载所有任务和标签数据，若已配置同步则从远端合并 */
   async function loadAll() {
     tasks.value = await call<Task[]>('get_tasks');
     allTags.value = await call<string[]>('get_all_tags');
     await refreshDailyCompletions();
+
+    // 从 Supabase 拉取远端任务并按 LWW 合并到本地
+    if (isConfigured.value) {
+      try {
+        await pullAndMerge();
+      } catch (e) {
+        console.warn('[sync] pullAndMerge failed, using local data:', e);
+      }
+    }
+  }
+
+  /** LWW 合并远端任务到本地：remote.updated_at > local.updated_at 时覆盖 */
+  async function pullAndMerge() {
+    const remoteTasks = await pullTasks();
+    if (remoteTasks.length === 0) return;
+
+    const localMap = new Map(tasks.value.map((t) => [t.id, t]));
+    let changed = false;
+
+    for (const rt of remoteTasks) {
+      const local = localMap.get(rt.id);
+      if (!local || new Date(rt.updated_at) > new Date(local.updated_at)) {
+        localMap.set(rt.id, rt);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      tasks.value = [...localMap.values()].filter((t) => !t.is_deleted);
+    }
+  }
+
+  /** 初始化 Realtime 订阅，远端变更自动合并到本地 */
+  function initSync() {
+    if (!isConfigured.value) return;
+
+    subscribeToChanges(
+      (remoteTask) => {
+        // 远端任务变更：LWW 合并
+        const idx = tasks.value.findIndex((t) => t.id === remoteTask.id);
+        if (idx >= 0) {
+          if (new Date(remoteTask.updated_at) > new Date(tasks.value[idx].updated_at)) {
+            tasks.value = tasks.value.map((t) =>
+              t.id === remoteTask.id ? remoteTask : t,
+            ).filter((t) => !t.is_deleted);
+          }
+        } else if (!remoteTask.is_deleted) {
+          tasks.value = [...tasks.value, remoteTask];
+        }
+        allTags.value = [...new Set(tasks.value.flatMap((t) => t.tags))].sort();
+      },
+      (_dc) => {
+        // 远端每日完成变更：刷新本地
+        refreshDailyCompletions();
+      },
+    );
   }
 
   async function refreshDailyCompletions() {
@@ -255,6 +315,8 @@ export function useTaskStore() {
       if (tags.length > 0) {
         allTags.value = await call<string[]>('get_all_tags');
       }
+      // 推送到 Supabase
+      if (isConfigured.value) pushTask(task).catch((e) => console.warn('[sync] pushTask:', e));
     } catch (e) {
       console.error('[addTask] invoke failed, falling back to reload:', e);
       // invoke 失败时回退到全量重载，保证数据一致性
@@ -268,9 +330,14 @@ export function useTaskStore() {
       // 通过 map 创建新对象和新数组引用，确保 Android WebView 响应式更新
       tasks.value = tasks.value.map((t) =>
         t.id === id
-          ? { ...t, completed: !t.completed, completed_at: !t.completed ? new Date().toISOString() : null }
+          ? { ...t, completed: !t.completed, completed_at: !t.completed ? new Date().toISOString() : null, updated_at: new Date().toISOString() }
           : t,
       );
+      // 推送到 Supabase
+      if (isConfigured.value) {
+        const updated = tasks.value.find((t) => t.id === id);
+        if (updated) pushTask(updated).catch((e) => console.warn('[sync] pushTask:', e));
+      }
     } catch (e) {
       console.error('[toggleTask] invoke failed, falling back to reload:', e);
       await loadAll();
@@ -302,7 +369,12 @@ export function useTaskStore() {
           isDaily: task.is_daily,
         },
       });
-      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, title } : t));
+      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, title, updated_at: new Date().toISOString() } : t));
+      // 推送到 Supabase
+      if (isConfigured.value) {
+        const updated = tasks.value.find((t) => t.id === id);
+        if (updated) pushTask(updated).catch((e) => console.warn('[sync] pushTask:', e));
+      }
     } catch (e) {
       console.error('[updateTask] invoke failed, falling back to reload:', e);
       await loadAll();
@@ -324,8 +396,13 @@ export function useTaskStore() {
           isDaily: task.is_daily,
         },
       });
-      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, tags, important, pinned } : t));
+      tasks.value = tasks.value.map((t) => (t.id === id ? { ...t, tags, important, pinned, updated_at: new Date().toISOString() } : t));
       allTags.value = await call<string[]>('get_all_tags');
+      // 推送到 Supabase
+      if (isConfigured.value) {
+        const updated = tasks.value.find((t) => t.id === id);
+        if (updated) pushTask(updated).catch((e) => console.warn('[sync] pushTask:', e));
+      }
     } catch (e) {
       console.error('[updateTaskMeta] invoke failed, falling back to reload:', e);
       await loadAll();
@@ -335,6 +412,15 @@ export function useTaskStore() {
   async function deleteTask(id: string) {
     try {
       await call('delete_task', { id });
+      // 软删除本地 ref：标记 is_deleted 并推送到远端
+      tasks.value = tasks.value.map((t) =>
+        t.id === id ? { ...t, is_deleted: true, updated_at: new Date().toISOString() } : t,
+      );
+      if (isConfigured.value) {
+        const deleted = tasks.value.find((t) => t.id === id);
+        if (deleted) pushTask(deleted).catch((e) => console.warn('[sync] pushTask:', e));
+      }
+      // 从显示列表中移除已软删除的任务
       tasks.value = tasks.value.filter((t) => t.id !== id);
       allTags.value = await call<string[]>('get_all_tags');
     } catch (e) {
@@ -393,6 +479,7 @@ export function useTaskStore() {
     pendingCount,
     // 数据加载
     loadAll,
+    initSync,
     // CRUD
     addTask,
     toggleTask,
