@@ -6,6 +6,9 @@ import type { Task, DailyCompletion } from '../types';
 /** Supabase 客户端单例 */
 let supabase: SupabaseClient | null = null;
 
+/** initClient 的进行中 Promise，防止竞态 */
+let initClientPromise: Promise<void> | null = null;
+
 /** 离线变更队列 */
 const offlineQueue: { type: 'upsert'; table: string; data: Record<string, unknown> }[] = [];
 const isOnline = ref(navigator.onLine);
@@ -38,10 +41,15 @@ export function useSync() {
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      console.warn('Supabase 未配置：缺少 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 环境变量');
+      console.warn('[sync] Supabase 未配置：缺少 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY');
       return;
     }
 
+    // 获取已签名的 JWT
+    const jwt = getJwt();
+
+    // 通过 global.headers 直接注入 JWT，绕过 setSession 对 auth.users 表的检查
+    // setSession 要求用户在 auth.users 中存在，而本项目的"零注册"架构不会创建 Auth 用户
     supabase = createClient(supabaseUrl, supabaseKey, {
       auth: {
         autoRefreshToken: false,
@@ -52,16 +60,39 @@ export function useSync() {
           eventsPerSecond: 10,
         },
       },
+      global: {
+        headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+      },
     });
 
-    // 注入自定义 JWT，使 auth.uid() 返回共享 UUID
-    const jwt = getJwt();
     if (jwt) {
-      await supabase.auth.setSession({
-        access_token: jwt,
-        refresh_token: '',
-      });
+      // 同时设置 Realtime 的 access token，确保 WebSocket 连接也经过认证
+      await supabase.realtime.setAuth(jwt);
+      console.log('[sync] client initialized with custom JWT header');
+    } else {
+      console.warn('[sync] client initialized but no JWT found in localStorage');
     }
+  }
+
+  /** 确保 Supabase 客户端已初始化（消除竞态条件） */
+  async function ensureClient(): Promise<boolean> {
+    if (supabase) return true;
+    if (!isConfigured.value) {
+      console.warn('[sync] ensureClient skipped: sync token not configured');
+      return false;
+    }
+    if (!initClientPromise) {
+      initClientPromise = initClient();
+    }
+    try {
+      await initClientPromise;
+    } catch (e) {
+      console.error('[sync] client init failed:', e);
+      supabase = null;
+    } finally {
+      initClientPromise = null;
+    }
+    return supabase !== null;
   }
 
   /** 监听 token 变化，自动初始化客户端 */
@@ -72,6 +103,7 @@ export function useSync() {
         initClient();
       } else {
         supabase = null;
+        initClientPromise = null;
       }
     },
     { immediate: true },
@@ -81,7 +113,11 @@ export function useSync() {
 
   /** 将本地任务推送到 Supabase */
   async function pushTask(task: Task): Promise<void> {
-    if (!supabase || !isOnline.value) {
+    const clientReady = await ensureClient();
+    if (!clientReady || !isOnline.value) {
+      if (!clientReady) {
+        console.warn('[sync] pushTask queued: client not ready (configure token in Settings)');
+      }
       offlineQueue.push({
         type: 'upsert',
         table: 'tasks',
@@ -89,6 +125,8 @@ export function useSync() {
       });
       return;
     }
+    // TypeScript narrow: ensureClient() returned true, supabase is non-null
+    if (!supabase) return;
 
     try {
       syncStatus.value = 'syncing';
@@ -126,7 +164,8 @@ export function useSync() {
 
   /** 将每日完成记录推送到 Supabase */
   async function pushDailyCompletion(dc: DailyCompletion): Promise<void> {
-    if (!supabase || !isOnline.value) {
+    const clientReady = await ensureClient();
+    if (!clientReady || !isOnline.value) {
       offlineQueue.push({
         type: 'upsert',
         table: 'daily_completions',
@@ -134,6 +173,7 @@ export function useSync() {
       });
       return;
     }
+    if (!supabase) return;
 
     try {
       const { error } = await supabase.from('daily_completions').upsert({
@@ -152,6 +192,11 @@ export function useSync() {
 
   /** 拉取远程任务（增量：updated_at > 上次同步时间） */
   async function pullTasks(): Promise<Task[]> {
+    const clientReady = await ensureClient();
+    if (!clientReady) {
+      console.warn('[sync] pullTasks skipped: client not ready');
+      return [];
+    }
     if (!supabase) return [];
 
     try {
@@ -173,10 +218,15 @@ export function useSync() {
   }
 
   /** 订阅 Supabase Realtime 变更 */
-  function subscribeToChanges(
+  async function subscribeToChanges(
     onTaskChange: (task: Task) => void,
     onDailyCompletionChange: (dc: DailyCompletion) => void,
-  ): RealtimeChannel | null {
+  ): Promise<RealtimeChannel | null> {
+    const clientReady = await ensureClient();
+    if (!clientReady) {
+      console.warn('[sync] subscribeToChanges skipped: client not ready');
+      return null;
+    }
     if (!supabase) return null;
 
     const channel = supabase
@@ -223,7 +273,9 @@ export function useSync() {
 
   /** 清空离线队列 */
   async function flushOfflineQueue(): Promise<void> {
-    if (!supabase || !isOnline.value || offlineQueue.length === 0) return;
+    const clientReady = await ensureClient();
+    if (!clientReady || !isOnline.value || offlineQueue.length === 0) return;
+    if (!supabase) return;
 
     syncStatus.value = 'syncing';
     const queue = [...offlineQueue];
