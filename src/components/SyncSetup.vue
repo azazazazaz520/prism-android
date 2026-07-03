@@ -27,6 +27,7 @@ function handleSave() {
 function handleGenerate() {
   const newToken = crypto.randomUUID();
   inputToken.value = newToken;
+  emit('save', newToken);
 }
 </script>
 

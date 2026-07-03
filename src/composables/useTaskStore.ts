@@ -233,6 +233,10 @@ export function useTaskStore() {
       } catch (e) {
         console.warn('[sync] pullAndMerge failed, using local data:', e);
       }
+    } else {
+      console.warn(
+        '[sync] loadAll: sync skipped — token not configured. Go to Settings > 跨设备同步.',
+      );
     }
   }
 
@@ -259,7 +263,10 @@ export function useTaskStore() {
 
   /** 初始化 Realtime 订阅，远端变更自动合并到本地 */
   function initSync() {
-    if (!isConfigured.value) return;
+    if (!isConfigured.value) {
+      console.warn('[sync] initSync skipped: token not configured');
+      return;
+    }
 
     subscribeToChanges(
       (remoteTask) => {
@@ -316,7 +323,13 @@ export function useTaskStore() {
         allTags.value = await call<string[]>('get_all_tags');
       }
       // 推送到 Supabase
-      if (isConfigured.value) pushTask(task).catch((e) => console.warn('[sync] pushTask:', e));
+      if (isConfigured.value) {
+        pushTask(task).catch((e) => console.warn('[sync] pushTask:', e));
+      } else {
+        console.warn(
+          '[sync] addTask: push skipped — token not configured. Go to Settings > 跨设备同步.',
+        );
+      }
     } catch (e) {
       console.error('[addTask] invoke failed, falling back to reload:', e);
       // invoke 失败时回退到全量重载，保证数据一致性
