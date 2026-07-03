@@ -1,88 +1,115 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useAuth } from '../composables/useAuth';
+import { useSyncCode } from '../composables/useSyncCode';
 
-defineProps<{
-  token: string;
-  isConfigured: boolean;
-}>();
+const { isLoggedIn, isLoading: authLoading, error: authError } = useAuth();
+const {
+  isPairing,
+  pairError,
+  getSyncCode,
+  hasProfile,
+  generateSyncCode,
+  joinProfile,
+  restoreProfile,
+} = useSyncCode();
 
-const emit = defineEmits<{
-  save: [token: string];
-  clear: [];
-  generate: [];
-}>();
+const syncCode = ref<string | null>(null);
+const paired = ref(false);
+const inputCode = ref('');
+const localError = ref<string | null>(null);
 
-const inputToken = ref('');
-const showInput = ref(false);
+onMounted(async () => {
+  await restoreProfile();
+  syncCode.value = await getSyncCode();
+  paired.value = await hasProfile();
+});
 
-function handleSave() {
-  const t = inputToken.value.trim();
-  if (t) {
-    emit('save', t);
-    inputToken.value = '';
-    showInput.value = false;
+async function handleGenerate() {
+  localError.value = null;
+  try {
+    const code = await generateSyncCode();
+    syncCode.value = code;
+    paired.value = true;
+  } catch (e) {
+    localError.value = pairError.value || (e as Error).message;
   }
 }
 
-function handleGenerate() {
-  const newToken = crypto.randomUUID();
-  inputToken.value = newToken;
-  emit('save', newToken);
+async function handleJoin() {
+  const code = inputCode.value.trim();
+  if (!code) return;
+  localError.value = null;
+  try {
+    await joinProfile(code);
+    syncCode.value = code;
+    paired.value = true;
+    inputCode.value = '';
+  } catch (e) {
+    localError.value = pairError.value || (e as Error).message;
+  }
 }
 </script>
 
 <template>
   <div class="sync-setup">
-    <div v-if="isConfigured" class="sync-configured">
-      <div class="sync-status">
-        <span class="status-dot"></span>
-        <span>同步已配置</span>
-      </div>
-      <div class="token-display">
-        <code>{{ token.slice(0, 8) }}...{{ token.slice(-4) }}</code>
-      </div>
-      <div class="sync-actions">
-        <button class="btn btn-outline" @click="showInput = true">更换令牌</button>
-        <button class="btn btn-danger" @click="emit('clear')">清除</button>
-      </div>
+    <!-- 未登录 / 初始化中 -->
+    <div v-if="!isLoggedIn" class="sync-state">
+      <p class="sync-hint" v-if="authLoading">正在初始化...</p>
+      <p class="sync-hint" v-else-if="authError">初始化失败：{{ authError }}</p>
     </div>
 
-    <div v-else class="sync-unconfigured">
-      <p class="sync-hint">输入与桌面端相同的同步令牌，或生成新令牌后在桌面端输入。</p>
-      <div class="input-row">
-        <input
-          v-model="inputToken"
-          class="token-input"
-          placeholder="输入同步令牌 (UUID)"
-          @keyup.enter="handleSave"
-        />
+    <!-- 已登录 -->
+    <template v-if="isLoggedIn">
+      <!-- 已配对 -->
+      <div v-if="paired" class="sync-configured">
+        <div class="sync-status">
+          <span class="status-dot"></span>
+          <span>已配对</span>
+        </div>
+        <div class="token-display">
+          <code>{{ syncCode }}</code>
+        </div>
+        <p class="sync-hint">
+          在其他设备上输入此同步码即可共享任务数据。请妥善保管，丢失后无法恢复。
+        </p>
       </div>
-      <div class="sync-actions">
-        <button class="btn btn-primary" @click="handleSave" :disabled="!inputToken.trim()">
-          保存
-        </button>
-        <button class="btn btn-outline" @click="handleGenerate">生成新令牌</button>
-      </div>
-    </div>
 
-    <!-- 更换令牌弹窗 -->
-    <div v-if="showInput && isConfigured" class="overlay" @click.self="showInput = false">
-      <div class="dialog">
-        <h3>更换同步令牌</h3>
-        <input
-          v-model="inputToken"
-          class="token-input"
-          placeholder="输入新令牌"
-          @keyup.enter="handleSave"
-        />
-        <div class="dialog-actions">
-          <button class="btn btn-outline" @click="showInput = false">取消</button>
-          <button class="btn btn-primary" @click="handleSave" :disabled="!inputToken.trim()">
-            确认
+      <!-- 未配对 -->
+      <div v-else class="sync-unconfigured">
+        <p class="sync-hint">生成同步码后，可在其他设备输入此码完成配对，实现跨设备任务同步。</p>
+
+        <div class="sync-actions">
+          <button class="btn btn-primary" :disabled="isPairing" @click="handleGenerate">
+            <span v-if="isPairing" class="spinner"></span>
+            <span v-else>生成同步码</span>
           </button>
         </div>
+
+        <div class="divider">
+          <span>或</span>
+        </div>
+
+        <div class="input-row">
+          <input
+            v-model="inputCode"
+            class="text-input"
+            type="text"
+            placeholder="输入已有同步码"
+            @keyup.enter="handleJoin"
+          />
+          <button
+            class="btn btn-outline"
+            :disabled="!inputCode.trim() || isPairing"
+            @click="handleJoin"
+          >
+            配对
+          </button>
+        </div>
+
+        <div v-if="localError" class="error-msg">{{ localError }}</div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -92,6 +119,10 @@ function handleGenerate() {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: var(--space-lg);
+}
+
+.sync-state {
+  text-align: center;
 }
 
 .sync-configured {
@@ -116,11 +147,13 @@ function handleGenerate() {
 }
 
 .token-display code {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
+  word-break: break-all;
+  display: block;
 }
 
 .sync-unconfigured {
@@ -133,6 +166,7 @@ function handleGenerate() {
   font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
+  margin: 0;
 }
 
 .input-row {
@@ -140,7 +174,7 @@ function handleGenerate() {
   gap: var(--space-sm);
 }
 
-.token-input {
+.text-input {
   flex: 1;
   height: 40px;
   padding: 0 var(--space-md);
@@ -152,13 +186,37 @@ function handleGenerate() {
   outline: none;
 }
 
-.token-input:focus {
+.text-input:focus {
   border-color: var(--accent);
+}
+
+.error-msg {
+  font-size: var(--text-sm);
+  color: var(--danger);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--danger-light);
+  border-radius: var(--radius-sm);
 }
 
 .sync-actions {
   display: flex;
   gap: var(--space-sm);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
 }
 
 .btn {
@@ -169,6 +227,9 @@ function handleGenerate() {
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .btn:active {
@@ -190,44 +251,18 @@ function handleGenerate() {
   color: var(--text-secondary);
 }
 
-.btn-danger {
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
-/* 弹窗 */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: var(--space-xl);
-}
-
-.dialog {
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-xl);
-  width: 100%;
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.dialog h3 {
-  font-size: var(--text-h2);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: var(--space-sm);
-  justify-content: flex-end;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
