@@ -5,6 +5,7 @@ import { useTaskStore } from './composables/useTaskStore';
 import { useTheme } from './composables/useTheme';
 import { useAuth } from './composables/useAuth';
 
+/** 检测是否运行在 Tauri 原生环境中，用于条件加载平台 API */
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 
 const router = useRouter();
@@ -13,6 +14,11 @@ const { loadAll, initSync } = useTaskStore();
 const { load: loadTheme } = useTheme();
 const { initAuth } = useAuth();
 
+/**
+ * 应用启动流程：
+ * 1. 匿名认证 → 2. 加载本地数据 + 主题 → 3. 初始化同步订阅
+ * 同步初始化放在数据加载之后，确保本地数据就绪后再合并远端数据。
+ */
 onMounted(async () => {
   await initAuth();
   await Promise.all([loadAll(), loadTheme()]);
@@ -20,6 +26,7 @@ onMounted(async () => {
   if (isTauri) {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const appWindow = getCurrentWindow();
+    // 窗口恢复焦点时刷新数据，确保从其他应用切回后数据为最新
     await appWindow.listen('tauri://focus', () => {
       loadAll();
     });

@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth, getSupabaseClient } from './useAuth';
 import type { Task, DailyCompletion } from '../types';
 
+/** 离线操作队列：网络断开时暂存本地，恢复后批量推送 */
 const OFFLINE_QUEUE_KEY = 'prism_offline_queue';
 
 interface OfflineQueueItem {
@@ -25,6 +26,7 @@ function persistOfflineQueue(queue: OfflineQueueItem[]) {
 }
 
 const offlineQueue: OfflineQueueItem[] = loadOfflineQueue();
+/** 同步状态指示器 */
 const isOnline = ref(navigator.onLine);
 const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>('idle');
 const lastSyncAt = ref<string | null>(null);
@@ -168,6 +170,7 @@ export function useSync() {
 
   // ── 下行同步 ──
 
+  /** 分页拉取远端任务，支持增量（仅拉取 lastSyncAt 之后）和强制全量两种模式 */
   async function pullTasks(forceFull = false): Promise<Task[]> {
     const profileId = getProfileId();
     if (!profileId) return [];
@@ -246,6 +249,7 @@ export function useSync() {
           syncStatus.value = 'idle';
         } else if (status === 'CHANNEL_ERROR') {
           syncStatus.value = 'error';
+          // 通道异常时 5 秒后自动重连
           setTimeout(() => subscribeToChanges(onTaskChange, onDailyCompletionChange), 5000);
         }
       });
@@ -255,6 +259,10 @@ export function useSync() {
 
   // ── 离线队列 ──
 
+  /**
+   * 刷新离线队列：网络恢复后将暂存的操作批量推送到 Supabase。
+   * 采用「先清空再逐条推送」策略：清空后若某条失败则重新入队，避免重复推送。
+   */
   async function flushOfflineQueue(): Promise<void> {
     if (!isOnline.value || offlineQueue.length === 0) return;
     const supabase = getSupabaseClient();

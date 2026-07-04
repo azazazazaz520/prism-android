@@ -72,7 +72,7 @@ function saveMockDaily(date: string, ids: string[]) {
   localStorage.setItem(DC_KEY + '_' + date, JSON.stringify(ids));
 }
 
-/** 统一调用接口：Tauri 环境走原生，浏览器走 localStorage */
+/** 统一调用接口：Tauri 环境走原生 invoke，浏览器走 localStorage 模拟层 */
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -81,6 +81,7 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   return mockInvoke<T>(cmd, args);
 }
 
+/** 浏览器端命令模拟层：用于开发调试，无需 Rust 后端即可运行 UI */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): T {
   const mockTasks = loadMockTasks();
@@ -250,12 +251,14 @@ export function useTaskStore() {
     }
   }
 
+  // 将远端 timestamps 对象转化为 Task 后调用纯函数合并
   /** LWW 合并远端任务到本地，强制全量拉取。 */
   async function pullAndMerge() {
     const remoteTasks = await pullTasks(true);
     if (remoteTasks.length === 0) return;
 
     const merged = mergeTasksLWW(tasks.value, remoteTasks);
+    // 仅在内容实际变化时替换数组引用，避免不必要的 UI 重渲染
     if (
       merged.length !== tasks.value.length ||
       !merged.every(
