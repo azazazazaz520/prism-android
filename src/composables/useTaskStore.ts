@@ -447,7 +447,17 @@ export function useTaskStore() {
   async function clearCompleted() {
     try {
       await call('clear_completed');
-      tasks.value = tasks.value.filter((t) => !t.completed);
+      const now = new Date().toISOString();
+      // 本地标记为软删除
+      tasks.value = tasks.value.map((t) =>
+        t.completed && !t.is_deleted ? { ...t, is_deleted: true, updated_at: now } : t,
+      );
+      // 推送每个被清除的任务到 Supabase
+      const cleared = tasks.value.filter((t) => t.completed && t.is_deleted);
+      for (const task of cleared) {
+        syncPush(task);
+      }
+      tasks.value = tasks.value.filter((t) => !t.is_deleted);
     } catch (e) {
       console.error('[clearCompleted] invoke failed, falling back to reload:', e);
       await loadAll();
