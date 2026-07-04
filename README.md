@@ -14,15 +14,15 @@
 
 ## 技术栈
 
-| 层 | 技术 |
-|---|---|
-| 框架 | Tauri 2 |
-| 前端 | Vue 3 + TypeScript |
-| 后端 | Rust |
-| 数据库 | Supabase (PostgreSQL) |
-| 认证 | Supabase Anonymous Sign-In |
-| 实时 | Supabase Realtime |
-| 安全 | Row-Level Security (RLS) |
+| 层     | 技术                       |
+| ------ | -------------------------- |
+| 框架   | Tauri 2                    |
+| 前端   | Vue 3 + TypeScript         |
+| 后端   | Rust                       |
+| 数据库 | Supabase (PostgreSQL)      |
+| 认证   | Supabase Anonymous Sign-In |
+| 实时   | Supabase Realtime          |
+| 安全   | Row-Level Security (RLS)   |
 
 ## 架构
 
@@ -82,17 +82,21 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_your_key_here
 ### 4. 启动开发
 
 **浏览器开发（纯前端调试）：**
+
 ```bash
 npm run dev
 ```
 
 **Android 开发（需要手机 USB 连接）：**
+
 ```bash
 npm run tauri:android
 ```
+
 > 自动检测 WiFi IP，手机和电脑连同一网络即可。
 
 **桌面端开发：**
+
 ```bash
 npm run tauri dev
 ```
@@ -114,13 +118,13 @@ npm run tauri android build
 
 ### 同步模型
 
-| 概念 | 说明 |
-|------|------|
-| Profile | 跨设备用户组，由同步码唯一标识 |
-| 同步码 | UUID v4，设备配对凭证，存储在 `config.json` |
+| 概念     | 说明                                               |
+| -------- | -------------------------------------------------- |
+| Profile  | 跨设备用户组，由同步码唯一标识                     |
+| 同步码   | UUID v4，设备配对凭证，存储在 `config.json`        |
 | LWW 合并 | Last-Writer-Wins，基于 `updated_at` 时间戳解决冲突 |
-| 软删除 | `is_deleted: true`，删除操作可跨设备传播 |
-| 离线队列 | 无网络时操作暂存 localStorage，恢复后自动推送 |
+| 软删除   | `is_deleted: true`，删除操作可跨设备传播           |
+| 离线队列 | 无网络时操作暂存 localStorage，恢复后自动推送      |
 
 ### 数据隔离
 
@@ -167,13 +171,13 @@ supabase/migrations/     # 数据库迁移
 
 提交前必须通过以下检查：
 
-| 检查项 | 命令 |
-|--------|------|
-| 前端格式化 | `npm run format` |
-| 前端类型检查 | `npx vue-tsc --noEmit` |
-| 前端测试 | `npx vitest run` |
-| Rust 格式化 | `cargo fmt --all --check` |
-| Rust Lint | `cargo clippy --all-targets -- -D warnings` |
+| 检查项       | 命令                                        |
+| ------------ | ------------------------------------------- |
+| 前端格式化   | `npm run format`                            |
+| 前端类型检查 | `npx vue-tsc --noEmit`                      |
+| 前端测试     | `npx vitest run`                            |
+| Rust 格式化  | `cargo fmt --all --check`                   |
+| Rust Lint    | `cargo clippy --all-targets -- -D warnings` |
 
 ## 许可
 
