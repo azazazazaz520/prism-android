@@ -219,6 +219,62 @@ export function useSyncCode() {
     }
   }
 
+  /** 编辑同步码：切换到另一个已有 profile */
+  async function updateSyncCode(newCode: string): Promise<void> {
+    if (!isLoggedIn.value || !user.value) {
+      throw new Error('请先完成匿名登录');
+    }
+
+    const trimmed = newCode.trim();
+    if (!trimmed) throw new Error('同步码不能为空');
+
+    isPairing.value = true;
+    pairError.value = null;
+
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) throw new Error('Supabase 客户端未初始化');
+
+      // 查找新 profile
+      const { data: profile, error: findError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('sync_code', trimmed)
+        .single();
+
+      if (findError || !profile) {
+        throw new Error('同步码无效，请检查后重试');
+      }
+
+      // 检查是否已在目标 profile 中
+      const { data: existing } = await supabase
+        .from('user_profiles')
+        .select('user_id')
+        .eq('user_id', user.value.id)
+        .eq('profile_id', profile.id)
+        .maybeSingle();
+
+      if (!existing) {
+        const { error: mappingError } = await supabase.from('user_profiles').insert({
+          user_id: user.value.id,
+          profile_id: profile.id,
+        });
+
+        if (mappingError) throw mappingError;
+      }
+
+      // 持久化新同步码
+      await call('set_sync_code', { code: trimmed });
+      setProfileId(profile.id);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '编辑同步码失败';
+      pairError.value = message;
+      throw e;
+    } finally {
+      isPairing.value = false;
+    }
+  }
+
   return {
     isPairing,
     pairError,
@@ -226,6 +282,7 @@ export function useSyncCode() {
     hasProfile,
     generateSyncCode,
     joinProfile,
+    updateSyncCode,
     restoreProfile,
   };
 }

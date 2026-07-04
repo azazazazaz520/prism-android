@@ -11,6 +11,7 @@ const {
   hasProfile,
   generateSyncCode,
   joinProfile,
+  updateSyncCode,
   restoreProfile,
 } = useSyncCode();
 
@@ -18,6 +19,8 @@ const syncCode = ref<string | null>(null);
 const paired = ref(false);
 const inputCode = ref('');
 const localError = ref<string | null>(null);
+const isEditing = ref(false);
+const editCode = ref('');
 
 onMounted(async () => {
   await restoreProfile();
@@ -49,6 +52,34 @@ async function handleJoin() {
     localError.value = pairError.value || (e as Error).message;
   }
 }
+
+function startEdit() {
+  editCode.value = syncCode.value || '';
+  isEditing.value = true;
+  localError.value = null;
+}
+
+function cancelEdit() {
+  isEditing.value = false;
+  editCode.value = '';
+  localError.value = null;
+}
+
+async function handleEdit() {
+  const code = editCode.value.trim();
+  if (!code || code === syncCode.value) {
+    cancelEdit();
+    return;
+  }
+  localError.value = null;
+  try {
+    await updateSyncCode(code);
+    syncCode.value = code;
+    isEditing.value = false;
+  } catch (e) {
+    localError.value = pairError.value || (e as Error).message;
+  }
+}
 </script>
 
 <template>
@@ -67,12 +98,49 @@ async function handleJoin() {
           <span class="status-dot"></span>
           <span>已配对</span>
         </div>
-        <div class="token-display">
-          <code>{{ syncCode }}</code>
+
+        <!-- 编辑模式 -->
+        <div v-if="isEditing" class="edit-row">
+          <input
+            v-model="editCode"
+            class="text-input"
+            type="text"
+            placeholder="输入新同步码"
+            @keyup.enter="handleEdit"
+          />
+          <button class="btn btn-primary btn-sm" :disabled="isPairing" @click="handleEdit">
+            保存
+          </button>
+          <button class="btn btn-outline btn-sm" :disabled="isPairing" @click="cancelEdit">
+            取消
+          </button>
         </div>
+
+        <!-- 展示模式 -->
+        <div v-else class="token-display">
+          <code>{{ syncCode }}</code>
+          <button class="btn-icon" title="编辑同步码" @click="startEdit">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+        </div>
+
         <p class="sync-hint">
           在其他设备上输入此同步码即可共享任务数据。请妥善保管，丢失后无法恢复。
         </p>
+
+        <div v-if="localError" class="error-msg">{{ localError }}</div>
       </div>
 
       <!-- 未配对 -->
@@ -146,14 +214,56 @@ async function handleJoin() {
   background: var(--success);
 }
 
+.token-display {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .token-display code {
+  flex: 1;
   font-size: var(--text-xs);
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   word-break: break-all;
-  display: block;
+}
+
+.edit-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.edit-row .text-input {
+  flex: 1;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.btn-sm {
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--text-xs);
+  height: 36px;
 }
 
 .sync-unconfigured {
