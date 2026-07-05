@@ -236,29 +236,56 @@ export function useTaskStore() {
 
   /** 加载本地数据，若已配对则从远端合并 */
   async function loadAll() {
-    tasks.value = await call<Task[]>('get_tasks');
-    allTags.value = await call<string[]>('get_all_tags');
+    const [localTasks, _allTags] = await Promise.all([
+      call<Task[]>('get_tasks'),
+      call<string[]>('get_all_tags'),
+    ]);
+    allTags.value = _allTags;
     await refreshDailyCompletions();
+
+    // 先展示本地数据，防止远端慢/失败时黑屏
+    tasks.value = localTasks.filter((t) => !t.is_deleted);
 
     // 恢复已配对的 profile，并尝试远端合并
     if (isLoggedIn.value) {
       try {
         await syncCode.restoreProfile();
-        await pullAndMerge();
+        const remoteTasks = await pullTasks(true);
+        if (remoteTasks.length > 0) {
+          tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
+        }
       } catch (e) {
-        console.warn('[sync] pullAndMerge failed:', e);
+        console.warn('[sync] loadAll pull failed:', e);
       }
     }
   }
 
-  // 将远端 timestamps 对象转化为 Task 后调用纯函数合并
-  /** LWW 合并远端任务到本地，强制全量拉取。 */
-  async function pullAndMerge() {
-    const remoteTasks = await pullTasks(true);
-    if (remoteTasks.length === 0) return;
+  /**
+   * 重新进入时刷新任务：后台合并本地+远端，替换前不重置列表。
+   * 保持当前数据可见，避免"先闪本地再出远端"的闪烁。
+   */
+  async function refreshTasks() {
+    const [localTasks, _allTags] = await Promise.all([
+      call<Task[]>('get_tasks'),
+      call<string[]>('get_all_tags'),
+    ]);
+    allTags.value = _allTags;
+    await refreshDailyCompletions();
 
-    const merged = mergeTasksLWW(tasks.value, remoteTasks);
-    // 仅在内容实际变化时替换数组引用，避免不必要的 UI 重渲染
+    let merged = localTasks.filter((t) => !t.is_deleted);
+
+    if (isLoggedIn.value) {
+      try {
+        const remoteTasks = await pullTasks(true);
+        if (remoteTasks.length > 0) {
+          merged = mergeTasksLWW(merged, remoteTasks);
+        }
+      } catch (e) {
+        console.warn('[sync] refreshTasks pull failed:', e);
+      }
+    }
+
+    // 仅在结果有变化时替换，避免无关更新触发重渲染
     if (
       merged.length !== tasks.value.length ||
       !merged.every(
@@ -501,6 +528,7 @@ export function useTaskStore() {
     overdueCount,
     pendingCount,
     loadAll,
+    refreshTasks,
     initSync,
     addTask,
     toggleTask,
