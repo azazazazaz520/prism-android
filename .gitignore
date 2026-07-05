@@ -1,3 +1,64 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Vite
+.vite/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# Test
+coverage/
+
+# OS generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Rust
+debug/
+target/
+*.pdb
+**/*.rs.bk
+rustc-ice-*.txt
+
+# Tauri generated
+src-tauri/gen/
+
+# Agent / docs (project-specific)
+docs/
+.agents/
+.qoder/
+skills-lock.json
+AGENTS.md
+CONTEXT.md
+WORKFLOW_TEMPLATE.md
+scripts/vision.cjs
 # ── Dependencies ──────────────────────────────────
 node_modules/
 
