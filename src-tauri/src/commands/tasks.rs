@@ -110,17 +110,25 @@ pub fn delete_task(state: tauri::State<AppState>, id: String) -> Result<(), Stri
     store::save_data(&data)
 }
 
-/// 一键清除所有已完成任务（硬删除 + 清理 daily_completions）
+/// 一键软删除所有已完成任务（标记 is_deleted，同步传播删除）
 #[tauri::command]
 pub fn clear_completed(state: tauri::State<AppState>) -> Result<(), String> {
     let mut data = state.data.lock().unwrap();
+    let now = chrono::Utc::now().to_rfc3339();
     let completed_ids: Vec<String> = data
         .tasks
         .iter()
-        .filter(|t| t.completed)
+        .filter(|t| t.completed && !t.is_deleted)
         .map(|t| t.id.clone())
         .collect();
-    data.tasks.retain(|t| !t.completed);
+    // 软删除所有已完成任务
+    for task in data.tasks.iter_mut() {
+        if task.completed && !task.is_deleted {
+            task.is_deleted = true;
+            task.updated_at = now.clone();
+        }
+    }
+    // 清理已软删除任务的 daily_completions
     for id in &completed_ids {
         data.daily_completions.retain(|dc| &dc.task_id != id);
     }
