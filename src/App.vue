@@ -10,7 +10,7 @@ const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNA
 
 const router = useRouter();
 const route = useRoute();
-const { loadAll, initSync } = useTaskStore();
+const { loadAll, refreshTasks, initSync } = useTaskStore();
 const { load: loadTheme } = useTheme();
 const { initAuth } = useAuth();
 
@@ -26,9 +26,13 @@ onMounted(async () => {
   if (isTauri) {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const appWindow = getCurrentWindow();
+    let lastRefresh = 0;
     // 窗口恢复焦点时刷新数据，确保从其他应用切回后数据为最新
     await appWindow.listen('tauri://focus', () => {
-      loadAll();
+      const now = Date.now();
+      if (now - lastRefresh < 5000) return;
+      lastRefresh = now;
+      refreshTasks();
     });
   }
 });
@@ -50,7 +54,7 @@ function switchTab(name: string) {
     <!-- 顶部栏 -->
     <header class="top-bar">
       <h1 class="brand">Prism</h1>
-      <button class="sync-btn" aria-label="同步" @click="loadAll()">
+      <button class="sync-btn" aria-label="同步" @click="refreshTasks()">
         <svg
           width="20"
           height="20"
