@@ -57,6 +57,7 @@ pub fn toggle_task(state: tauri::State<AppState>, id: String) -> Result<(), Stri
 }
 
 /// 切换每日任务的完成状态（按日期记录）
+/// 同时同步更新 task.completed，确保 Supabase tasks 表能感知完成状态变更
 #[tauri::command]
 pub fn toggle_daily_task(
     state: tauri::State<AppState>,
@@ -64,15 +65,40 @@ pub fn toggle_daily_task(
     date: String,
 ) -> Result<(), String> {
     let mut data = state.data.lock().unwrap();
+    let now = chrono::Utc::now().to_rfc3339();
     if let Some(pos) = data
         .daily_completions
         .iter()
         .position(|dc| dc.task_id == id && dc.date == date)
     {
+        // 取消完成：移除 daily_completion
         data.daily_completions.remove(pos);
+        // 若该任务当天不再有完成记录，则设 completed = false
+        let still_completed = data
+            .daily_completions
+            .iter()
+            .any(|dc| dc.task_id == id && dc.date == date);
+        if !still_completed {
+            if let Some(task) = data.tasks.iter_mut().find(|t| t.id == id) {
+                task.completed = false;
+                task.completed_at = None;
+                task.updated_at = now;
+            }
+        }
     } else {
-        data.daily_completions
-            .push(store::DailyCompletion { task_id: id, date });
+        // 完成：添加 daily_completion
+        data.daily_completions.push(store::DailyCompletion {
+            task_id: id.clone(),
+            date,
+        });
+        // 同步更新 task.completed，使 Supabase tasks 表反映完成状态
+        if let Some(task) = data.tasks.iter_mut().find(|t| t.id == id) {
+            if !task.completed {
+                task.completed = true;
+                task.completed_at = Some(now.clone());
+                task.updated_at = now;
+            }
+        }
     }
     store::save_data(&data)
 }
@@ -186,4 +212,36 @@ pub fn get_daily_completions(state: tauri::State<AppState>, date: String) -> Vec
         .filter(|dc| dc.date == date)
         .map(|dc| dc.task_id.clone())
         .collect()
+}
+
+/// 合并远端每日完成记录到本地（按 task_id + date 去重）
+#[tauri::command]
+pub fn sync_remote_daily_completions(
+    state: tauri::State<AppState>,
+    remote_completions: Vec<store::DailyCompletion>,
+) -> Result<(), String> {
+    let mut data = state.data.lock().unwrap();
+    for remote in remote_completions {
+        let exists = data
+            .daily_completions
+            .iter()
+            .any(|dc| dc.task_id == remote.task_id && dc.date == remote.date);
+        if !exists {
+            data.daily_completions.push(remote);
+        }
+    }
+    store::save_data(&data)
+}
+
+/// 从本地删除指定每日完成记录（Realtime DELETE 事件时调用）
+#[tauri::command]
+pub fn delete_daily_completion(
+    state: tauri::State<AppState>,
+    task_id: String,
+    date: String,
+) -> Result<(), String> {
+    let mut data = state.data.lock().unwrap();
+    data.daily_completions
+        .retain(|dc| !(dc.task_id == task_id && dc.date == date));
+    store::save_data(&data)
 }

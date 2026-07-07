@@ -80,6 +80,8 @@ pub fn run() {
             commands::tasks::get_all_tags,
             commands::tasks::delete_tag,
             commands::tasks::get_daily_completions,
+            commands::tasks::sync_remote_daily_completions,
+            commands::tasks::delete_daily_completion,
             // 配置命令
             commands::config::get_theme,
             commands::config::set_theme,
