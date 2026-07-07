@@ -283,6 +283,22 @@ export function useTaskStore() {
 
   // ── 数据加载与同步 ──
 
+  /**
+   * 清理远端已删除但本地残留的每日完成记录。
+   * 对比本地与远端的 daily_completions，移除本地有但远端无的记录。
+   * 解决 sync_remote_daily_completions（只增不删）在 pull 路径下导致的对钩残留问题。
+   */
+  async function cleanStaleDailyCompletions(remoteDCs: Array<{ task_id: string; date: string }>) {
+    const today = todayStr();
+    const remoteTodayIds = remoteDCs.filter((dc) => dc.date === today).map((dc) => dc.task_id);
+    const localTodayIds = await call<string[]>('get_daily_completions', { date: today });
+    for (const taskId of localTodayIds) {
+      if (!remoteTodayIds.includes(taskId)) {
+        await call('delete_daily_completion', { taskId, date: today });
+      }
+    }
+  }
+
   /** 加载本地数据，若已配对则从远端合并 */
   async function loadAll() {
     const [localTasks, _allTags] = await Promise.all([
@@ -307,6 +323,8 @@ export function useTaskStore() {
           tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
         }
         if (remoteDCs.length > 0) {
+          // 清理远端已删除但本地残留的每日完成记录
+          await cleanStaleDailyCompletions(remoteDCs);
           await call('sync_remote_daily_completions', {
             remoteCompletions: remoteDCs.map((dc: { task_id: string; date: string }) => ({
               task_id: dc.task_id,
@@ -345,6 +363,8 @@ export function useTaskStore() {
           merged = mergeTasksLWW(merged, remoteTasks);
         }
         if (remoteDCs.length > 0) {
+          // 清理远端已删除但本地残留的每日完成记录
+          await cleanStaleDailyCompletions(remoteDCs);
           await call('sync_remote_daily_completions', {
             remoteCompletions: remoteDCs.map((dc: { task_id: string; date: string }) => ({
               task_id: dc.task_id,

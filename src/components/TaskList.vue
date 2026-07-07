@@ -130,7 +130,8 @@ function resetSwipe(taskId: string) {
           @touchmove="onTouchMove(task.id, $event)"
           @touchend="onTouchEnd(task.id)"
         >
-          <!-- 勾选按钮 -->
+          <!-- 勾选按钮：对钩 SVG 始终渲染，通过 CSS .done 类控制可见性 -->
+          <!-- 避免 v-if 在 Android WebView 中对 SVG 元素增删不可靠导致对钩残留 -->
           <button
             v-if="task.is_daily"
             class="check-btn"
@@ -138,7 +139,7 @@ function resetSwipe(taskId: string) {
             @click="emit('toggle-daily', task.id, todayStr())"
           >
             <svg
-              v-if="dailyCompletionsMap[task.id]"
+              class="check-mark"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -158,7 +159,7 @@ function resetSwipe(taskId: string) {
             @click="emit('toggle', task.id)"
           >
             <svg
-              v-if="task.completed"
+              class="check-mark"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -316,10 +317,18 @@ function resetSwipe(taskId: string) {
   transition: all var(--transition-fast);
 }
 
+.check-btn .check-mark {
+  display: none;
+}
+
 .check-btn.done {
   background: var(--success);
   border-color: var(--success);
   color: #fff;
+}
+
+.check-btn.done .check-mark {
+  display: block;
 }
 
 /* 任务内容 */
