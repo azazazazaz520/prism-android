@@ -285,16 +285,19 @@ export function useTaskStore() {
 
   /**
    * 清理远端已删除但本地残留的每日完成记录。
-   * 对比本地与远端的 daily_completions，移除本地有但远端无的记录。
+   * 对比本地与远端的 daily_completions，按日期逐个清理本地有但远端无的记录。
    * 解决 sync_remote_daily_completions（只增不删）在 pull 路径下导致的对钩残留问题。
    */
   async function cleanStaleDailyCompletions(remoteDCs: Array<{ task_id: string; date: string }>) {
-    const today = todayStr();
-    const remoteTodayIds = remoteDCs.filter((dc) => dc.date === today).map((dc) => dc.task_id);
-    const localTodayIds = await call<string[]>('get_daily_completions', { date: today });
-    for (const taskId of localTodayIds) {
-      if (!remoteTodayIds.includes(taskId)) {
-        await call('delete_daily_completion', { taskId, date: today });
+    // 收集远端涉及的所有日期
+    const remoteDates = [...new Set(remoteDCs.map((dc) => dc.date))];
+    for (const date of remoteDates) {
+      const remoteIds = remoteDCs.filter((dc) => dc.date === date).map((dc) => dc.task_id);
+      const localIds = await call<string[]>('get_daily_completions', { date });
+      for (const taskId of localIds) {
+        if (!remoteIds.includes(taskId)) {
+          await call('delete_daily_completion', { taskId, date });
+        }
       }
     }
   }
@@ -412,6 +415,13 @@ export function useTaskStore() {
               );
               // 同时清理本地磁盘，否则 refresh 会从磁盘读回旧数据
               call('delete_daily_completion', { taskId: remoteTask.id, date: todayStr() });
+            }
+            // 正向安全网：当每日任务的 completed 被远端置为 true 时，
+            // 同步更新 dailyCompletedIds，防止 Realtime DC INSERT 事件延迟/丢失
+            if (remoteTask.is_daily && remoteTask.completed) {
+              if (!dailyCompletedIds.value.includes(remoteTask.id)) {
+                dailyCompletedIds.value = [...dailyCompletedIds.value, remoteTask.id];
+              }
             }
           }
         } else if (!remoteTask.is_deleted) {

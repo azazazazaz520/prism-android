@@ -169,6 +169,12 @@ export function useSync() {
       if (error) throw error;
     } catch (e) {
       console.error('同步每日完成记录失败:', e);
+      offlineQueue.push({
+        type: 'upsert',
+        table: 'daily_completions',
+        data: { task_id: dc.task_id, date: dc.date, user_id: uid, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
     }
   }
 
@@ -313,7 +319,8 @@ export function useSync() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks', filter: `profile_id=eq.${profileId}` },
         (payload) => {
-          const task = payload.new as Task;
+          // DELETE 事件 payload.new 为 null，回退到 payload.old
+          const task = (payload.new || payload.old) as Task;
           if (task) onTaskChange(task);
         },
       )

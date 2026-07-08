@@ -310,18 +310,67 @@ describe('cleanStaleDailyCompletions — Pull 路径 DC 清理', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('只清理当天日期的 DC，其他日期不受影响', () => {
-    const today = '2026-07-07';
-    // 本地有今天和昨天的 DC
-    const localTodayIds = ['task-1'];
-    // 远端 DC：昨天的还在，今天的 task-1 已被删除
+  it('多日期 DC 清理：各日期独立对比', () => {
+    // 修复后 cleanStaleDailyCompletions 遍历所有远端日期
     const remoteDCs = [
-      { task_id: 'task-1', date: '2026-07-06' }, // 昨天的，仍存在
+      { task_id: 'task-2', date: '2026-07-07' }, // 今天只有 task-2
+      { task_id: 'task-3', date: '2026-07-06' }, // 昨天只有 task-3
     ];
+    // 本地今天有 task-1（已删）和 task-2（仍存在）
+    const localTodayIds = ['task-1', 'task-2'];
+    const today = '2026-07-07';
 
     const result = simulateCleanStale(localTodayIds, remoteDCs, today);
-    // 今天 task-1 被清理
-    expect(result).toHaveLength(0);
-    // 昨天的 task-1 不受影响（不在 localTodayIds 中，属于不同日期）
+    expect(result).not.toContain('task-1');
+    expect(result).toContain('task-2');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  回归测试：Realtime 路径正向安全网
+//
+//  场景：设备 A 完成每日任务 → DC INSERT 可能延迟/丢失
+//  设备 B Realtime 收到 task.completed=true → 正向安全网补 dailyCompletedIds
+// ═══════════════════════════════════════════════════════════════
+
+describe('Realtime 正向安全网 — 每日任务完成', () => {
+  function simulateRealtimeComplete(
+    dailyCompletedIds: string[],
+    remoteTask: { is_daily: boolean; completed: boolean; id: string },
+  ): string[] {
+    let ids = [...dailyCompletedIds];
+    if (remoteTask.is_daily && remoteTask.completed) {
+      if (!ids.includes(remoteTask.id)) {
+        ids = [...ids, remoteTask.id];
+      }
+    }
+    return ids;
+  }
+
+  it('每日任务远端完成时，正向安全网应更新 dailyCompletedIds', () => {
+    const ids = simulateRealtimeComplete([], {
+      is_daily: true,
+      completed: true,
+      id: 'daily-1',
+    });
+    expect(ids).toContain('daily-1');
+  });
+
+  it('普通任务完成时不应触发正向安全网', () => {
+    const ids = simulateRealtimeComplete([], {
+      is_daily: false,
+      completed: true,
+      id: 'normal-1',
+    });
+    expect(ids).toHaveLength(0);
+  });
+
+  it('已存在的记录不重复添加', () => {
+    const ids = simulateRealtimeComplete(['daily-1'], {
+      is_daily: true,
+      completed: true,
+      id: 'daily-1',
+    });
+    expect(ids).toHaveLength(1);
   });
 });
