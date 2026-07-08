@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { Task } from '../types';
 import { useSync } from './useSync';
 import { useAuth } from './useAuth';
@@ -238,6 +238,15 @@ export function mergeTasksLWW(local: Task[], remote: Task[]): Task[] {
   return [...merged.values()].filter((t) => !t.is_deleted);
 }
 
+/** 为 sync pull 操作添加超时，离线时快速失败而非等待 HTTP 超时 */
+const PULL_TIMEOUT_MS = 8000;
+async function pullWithTimeout<T>(promise: Promise<T>): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('pull timeout')), PULL_TIMEOUT_MS),
+  );
+  return Promise.race([promise, timeout]);
+}
+
 /** 任务看板 composable：核心数据 + 筛选 + CRUD + 同步 */
 export function useTaskStore() {
   const { isLoggedIn } = useAuth();
@@ -248,6 +257,7 @@ export function useTaskStore() {
     pullTasks,
     pullDailyCompletions,
     subscribeToChanges,
+    syncStatus,
   } = useSync();
   const syncCode = useSyncCode();
 
@@ -319,13 +329,17 @@ export function useTaskStore() {
       try {
         await syncCode.restoreProfile();
         const [remoteTasks, remoteDCs] = await Promise.all([
-          pullTasks(true),
-          pullDailyCompletions(),
+          pullWithTimeout(pullTasks(true)),
+          pullWithTimeout(pullDailyCompletions()),
         ]);
-        if (remoteTasks.length > 0) {
+        if (remoteTasks && remoteTasks.length > 0) {
           tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
+          // 将远端变更持久化到本地 data.json，防止离线重启后僵尸任务复活
+          call('sync_local_tasks', { remoteTasks }).catch((e: unknown) =>
+            console.warn('[sync] sync_local_tasks failed:', e),
+          );
         }
-        if (remoteDCs.length > 0) {
+        if (remoteDCs && remoteDCs.length > 0) {
           // 清理远端已删除但本地残留的每日完成记录
           await cleanStaleDailyCompletions(remoteDCs);
           await call('sync_remote_daily_completions', {
@@ -359,13 +373,17 @@ export function useTaskStore() {
     if (isLoggedIn.value) {
       try {
         const [remoteTasks, remoteDCs] = await Promise.all([
-          pullTasks(true),
-          pullDailyCompletions(),
+          pullWithTimeout(pullTasks(true)),
+          pullWithTimeout(pullDailyCompletions()),
         ]);
-        if (remoteTasks.length > 0) {
+        if (remoteTasks && remoteTasks.length > 0) {
           merged = mergeTasksLWW(merged, remoteTasks);
+          // 将远端变更持久化到本地 data.json，防止离线重启后僵尸任务复活
+          call('sync_local_tasks', { remoteTasks }).catch((e: unknown) =>
+            console.warn('[sync] sync_local_tasks failed:', e),
+          );
         }
-        if (remoteDCs.length > 0) {
+        if (remoteDCs && remoteDCs.length > 0) {
           // 清理远端已删除但本地残留的每日完成记录
           await cleanStaleDailyCompletions(remoteDCs);
           await call('sync_remote_daily_completions', {
@@ -685,6 +703,22 @@ export function useTaskStore() {
     }
     selectedTags.value = [tag];
   }
+
+  /** 拉取远端任务并合并到本地列表 */
+  async function pullAndMerge() {
+    const remoteTasks = await pullTasks(true);
+    if (remoteTasks.length === 0) return;
+    tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
+  }
+
+  // 网络恢复后自动拉取远端变更（弥补 Tauri webview 中 online 事件不可靠）
+  watch(syncStatus, (newVal, oldVal) => {
+    if (newVal === 'idle' && (oldVal === 'offline' || oldVal === 'error')) {
+      pullAndMerge().catch((e: unknown) =>
+        console.warn('[sync] auto-pull after reconnect failed:', e),
+      );
+    }
+  });
 
   return {
     tasks,

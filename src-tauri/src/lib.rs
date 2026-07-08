@@ -82,6 +82,7 @@ pub fn run() {
             commands::tasks::get_daily_completions,
             commands::tasks::sync_remote_daily_completions,
             commands::tasks::delete_daily_completion,
+            commands::tasks::sync_local_tasks,
             // 配置命令
             commands::config::get_theme,
             commands::config::set_theme,

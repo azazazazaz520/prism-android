@@ -28,8 +28,23 @@ function persistOfflineQueue(queue: OfflineQueueItem[]) {
 const offlineQueue: OfflineQueueItem[] = loadOfflineQueue();
 /** 同步状态指示器 */
 const isOnline = ref(navigator.onLine);
-const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>('idle');
+/** 同步状态：启动时根据实际网络状态初始化，避免离线启动显示"已同步" */
+const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>(
+  navigator.onLine ? 'idle' : 'offline',
+);
 const lastSyncAt = ref<string | null>(null);
+
+/** 队列重试定时器：push 失败后延迟重试，防止 Tauri 中 online 事件不可靠 */
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+const RETRY_DELAY_MS = 10_000;
+
+function scheduleRetry(fn: () => void) {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    fn();
+  }, RETRY_DELAY_MS);
+}
 
 /** 当前设备所属的 profile_id，由 useSyncCode 设置 */
 const currentProfileId = ref<string | null>(null);
@@ -121,6 +136,8 @@ export function useSync() {
       if (error) throw error;
       lastSyncAt.value = new Date().toISOString();
       syncStatus.value = 'idle';
+      // 成功推送后消费离线队列
+      flushOfflineQueue();
     } catch (e) {
       console.error('同步任务失败:', e);
       syncStatus.value = 'error';
@@ -134,6 +151,7 @@ export function useSync() {
         },
       });
       persistOfflineQueue(offlineQueue);
+      scheduleRetry(() => flushOfflineQueue());
     }
   }
 
@@ -167,6 +185,8 @@ export function useSync() {
       });
 
       if (error) throw error;
+      // 成功推送后消费离线队列
+      flushOfflineQueue();
     } catch (e) {
       console.error('同步每日完成记录失败:', e);
       offlineQueue.push({
@@ -175,6 +195,7 @@ export function useSync() {
         data: { task_id: dc.task_id, date: dc.date, user_id: uid, profile_id: profileId },
       });
       persistOfflineQueue(offlineQueue);
+      scheduleRetry(() => flushOfflineQueue());
     }
   }
 
@@ -205,6 +226,8 @@ export function useSync() {
         .eq('profile_id', profileId);
 
       if (error) throw error;
+      // 成功推送后消费离线队列
+      flushOfflineQueue();
     } catch (e) {
       console.error('删除每日完成记录失败:', e);
       offlineQueue.push({
@@ -213,6 +236,7 @@ export function useSync() {
         data: { task_id: taskId, date, user_id: uid, profile_id: profileId },
       });
       persistOfflineQueue(offlineQueue);
+      scheduleRetry(() => flushOfflineQueue());
     }
   }
 
@@ -357,10 +381,11 @@ export function useSync() {
 
   /**
    * 刷新离线队列：网络恢复后将暂存的操作批量推送到 Supabase。
-   * 采用「先清空再逐条推送」策略：清空后若某条失败则重新入队，避免重复推送。
+   * 采用「先清空再逐条推送」策略：清空后若某条失败则重新入队。
+   * 若队列未清空，自动调度重试，覆盖 Tauri webview 中 online 事件不可靠的场景。
    */
   async function flushOfflineQueue(): Promise<void> {
-    if (!isOnline.value || offlineQueue.length === 0) return;
+    if (offlineQueue.length === 0) return;
     const supabase = getSupabaseClient();
 
     syncStatus.value = 'syncing';
@@ -382,7 +407,13 @@ export function useSync() {
       }
     }
 
-    syncStatus.value = 'idle';
+    if (offlineQueue.length > 0) {
+      // 队列未清空（网络仍未恢复），调度重试
+      syncStatus.value = 'error';
+      scheduleRetry(() => flushOfflineQueue());
+    } else {
+      syncStatus.value = 'idle';
+    }
   }
 
   return {
