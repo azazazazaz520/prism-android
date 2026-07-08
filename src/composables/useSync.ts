@@ -7,7 +7,7 @@ import type { Task, DailyCompletion } from '../types';
 const OFFLINE_QUEUE_KEY = 'prism_offline_queue';
 
 interface OfflineQueueItem {
-  type: 'upsert';
+  type: 'upsert' | 'delete';
   table: string;
   data: Record<string, unknown>;
 }
@@ -33,6 +33,9 @@ const lastSyncAt = ref<string | null>(null);
 
 /** 当前设备所属的 profile_id，由 useSyncCode 设置 */
 const currentProfileId = ref<string | null>(null);
+
+/** 当前 Realtime channel 引用，用于重连前先关闭旧 channel */
+let activeChannel: RealtimeChannel | null = null;
 
 /** 分页大小 */
 const PAGE_SIZE = 500;
@@ -145,9 +148,10 @@ export function useSync() {
         type: 'upsert',
         table: 'daily_completions',
         data: {
-          ...(dc as unknown as Record<string, unknown>),
-          profile_id: profileId,
+          task_id: dc.task_id,
+          date: dc.date,
           user_id: uid,
+          profile_id: profileId,
         },
       });
       persistOfflineQueue(offlineQueue);
@@ -165,10 +169,88 @@ export function useSync() {
       if (error) throw error;
     } catch (e) {
       console.error('同步每日完成记录失败:', e);
+      offlineQueue.push({
+        type: 'upsert',
+        table: 'daily_completions',
+        data: { task_id: dc.task_id, date: dc.date, user_id: uid, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
+    }
+  }
+
+  /** 从 Supabase 删除每日完成记录（取消完成时调用） */
+  async function pushDeleteDailyCompletion(taskId: string, date: string): Promise<void> {
+    const uid = userId();
+    if (!uid) return;
+    const profileId = getProfileId();
+    const supabase = getSupabaseClient();
+
+    if (!isOnline.value) {
+      offlineQueue.push({
+        type: 'delete',
+        table: 'daily_completions',
+        data: { task_id: taskId, date, user_id: uid, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('daily_completions')
+        .delete()
+        .eq('task_id', taskId)
+        .eq('date', date)
+        .eq('user_id', uid)
+        .eq('profile_id', profileId);
+
+      if (error) throw error;
+    } catch (e) {
+      console.error('删除每日完成记录失败:', e);
+      offlineQueue.push({
+        type: 'delete',
+        table: 'daily_completions',
+        data: { task_id: taskId, date, user_id: uid, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
     }
   }
 
   // ── 下行同步 ──
+
+  /** 分页拉取远端的每日完成记录 */
+  async function pullDailyCompletions(): Promise<DailyCompletion[]> {
+    const profileId = getProfileId();
+    if (!profileId) return [];
+
+    const supabase = getSupabaseClient();
+    const allDCs: DailyCompletion[] = [];
+    let page = 0;
+
+    try {
+      do {
+        const { data, error } = await supabase
+          .from('daily_completions')
+          .select('*')
+          .eq('profile_id', profileId)
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+          .order('date', { ascending: false });
+
+        if (error) throw error;
+
+        const batch = (data || []) as DailyCompletion[];
+        allDCs.push(...batch);
+        page++;
+
+        if (batch.length < PAGE_SIZE) break;
+      } while (true);
+
+      return allDCs;
+    } catch (e) {
+      console.error('拉取远程每日完成记录失败:', e);
+      return [];
+    }
+  }
 
   /** 分页拉取远端任务，支持增量（仅拉取 lastSyncAt 之后）和强制全量两种模式 */
   async function pullTasks(forceFull = false): Promise<Task[]> {
@@ -214,12 +296,22 @@ export function useSync() {
 
   async function subscribeToChanges(
     onTaskChange: (task: Task) => void,
-    onDailyCompletionChange: (dc: DailyCompletion) => void,
+    onDailyCompletionChange: (
+      dc: DailyCompletion,
+      eventType: 'INSERT' | 'UPDATE' | 'DELETE',
+    ) => void,
   ): Promise<RealtimeChannel | null> {
     const profileId = getProfileId();
     if (!profileId) return null;
 
     const supabase = getSupabaseClient();
+
+    // 关闭旧 channel 避免 "cannot add callbacks after subscribe" 错误
+    if (activeChannel) {
+      activeChannel.unsubscribe();
+      supabase.removeChannel(activeChannel);
+      activeChannel = null;
+    }
 
     const channel = supabase
       .channel('tasks-changes')
@@ -227,7 +319,8 @@ export function useSync() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks', filter: `profile_id=eq.${profileId}` },
         (payload) => {
-          const task = payload.new as Task;
+          // DELETE 事件 payload.new 为 null，回退到 payload.old
+          const task = (payload.new || payload.old) as Task;
           if (task) onTaskChange(task);
         },
       )
@@ -240,8 +333,9 @@ export function useSync() {
           filter: `profile_id=eq.${profileId}`,
         },
         (payload) => {
-          const dc = payload.new as DailyCompletion;
-          if (dc) onDailyCompletionChange(dc);
+          const dc = (payload.new || payload.old) as DailyCompletion;
+          const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
+          if (dc) onDailyCompletionChange(dc, eventType);
         },
       )
       .subscribe((status) => {
@@ -249,11 +343,13 @@ export function useSync() {
           syncStatus.value = 'idle';
         } else if (status === 'CHANNEL_ERROR') {
           syncStatus.value = 'error';
+          activeChannel = null;
           // 通道异常时 5 秒后自动重连
           setTimeout(() => subscribeToChanges(onTaskChange, onDailyCompletionChange), 5000);
         }
       });
 
+    activeChannel = channel;
     return channel;
   }
 
@@ -274,7 +370,11 @@ export function useSync() {
 
     for (const item of queue) {
       try {
-        await supabase.from(item.table).upsert(item.data);
+        if (item.type === 'delete') {
+          await supabase.from(item.table).delete().match(item.data);
+        } else {
+          await supabase.from(item.table).upsert(item.data);
+        }
       } catch (e) {
         offlineQueue.push(item);
         persistOfflineQueue(offlineQueue);
@@ -293,7 +393,9 @@ export function useSync() {
     setProfileId,
     pushTask,
     pushDailyCompletion,
+    pushDeleteDailyCompletion,
     pullTasks,
+    pullDailyCompletions,
     subscribeToChanges,
     flushOfflineQueue,
   };

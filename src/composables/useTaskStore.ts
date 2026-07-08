@@ -132,9 +132,28 @@ function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): T {
         date = args?.date as string;
       const dc = loadMockDaily(date);
       const idx = dc.indexOf(tid);
-      if (idx >= 0) dc.splice(idx, 1);
-      else dc.push(tid);
+      if (idx >= 0) {
+        dc.splice(idx, 1);
+        // 若当天无其他完成记录，重置 task.completed
+        if (!dc.includes(tid)) {
+          const task = mockTasks.find((t) => t.id === tid);
+          if (task) {
+            task.completed = false;
+            task.completed_at = null;
+            task.updated_at = new Date().toISOString();
+          }
+        }
+      } else {
+        dc.push(tid);
+        const task = mockTasks.find((t) => t.id === tid);
+        if (task && !task.completed) {
+          task.completed = true;
+          task.completed_at = new Date().toISOString();
+          task.updated_at = new Date().toISOString();
+        }
+      }
       saveMockDaily(date, dc);
+      saveMockTasks(mockTasks);
       return undefined as T;
     }
     case 'update_task': {
@@ -166,6 +185,29 @@ function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): T {
       mockTasks.push(...mockTasks.filter((t) => !t.completed));
       saveMockTasks(mockTasks);
       return undefined as T;
+    case 'sync_remote_daily_completions': {
+      const remoteCompletions =
+        (args?.remoteCompletions as Array<{ task_id: string; date: string }>) || [];
+      for (const rc of remoteCompletions) {
+        const dc = loadMockDaily(rc.date);
+        if (!dc.includes(rc.task_id)) {
+          dc.push(rc.task_id);
+          saveMockDaily(rc.date, dc);
+        }
+      }
+      return undefined as T;
+    }
+    case 'delete_daily_completion': {
+      const delTaskId = args?.taskId as string;
+      const delDate = args?.date as string;
+      const dc = loadMockDaily(delDate);
+      const delIdx = dc.indexOf(delTaskId);
+      if (delIdx >= 0) {
+        dc.splice(delIdx, 1);
+        saveMockDaily(delDate, dc);
+      }
+      return undefined as T;
+    }
     default:
       return undefined as T;
   }
@@ -199,7 +241,14 @@ export function mergeTasksLWW(local: Task[], remote: Task[]): Task[] {
 /** 任务看板 composable：核心数据 + 筛选 + CRUD + 同步 */
 export function useTaskStore() {
   const { isLoggedIn } = useAuth();
-  const { pushTask, pullTasks, subscribeToChanges } = useSync();
+  const {
+    pushTask,
+    pushDailyCompletion,
+    pushDeleteDailyCompletion,
+    pullTasks,
+    pullDailyCompletions,
+    subscribeToChanges,
+  } = useSync();
   const syncCode = useSyncCode();
 
   const dailyCompletionsMap = computed(() => {
@@ -234,6 +283,25 @@ export function useTaskStore() {
 
   // ── 数据加载与同步 ──
 
+  /**
+   * 清理远端已删除但本地残留的每日完成记录。
+   * 对比本地与远端的 daily_completions，按日期逐个清理本地有但远端无的记录。
+   * 解决 sync_remote_daily_completions（只增不删）在 pull 路径下导致的对钩残留问题。
+   */
+  async function cleanStaleDailyCompletions(remoteDCs: Array<{ task_id: string; date: string }>) {
+    // 收集远端涉及的所有日期
+    const remoteDates = [...new Set(remoteDCs.map((dc) => dc.date))];
+    for (const date of remoteDates) {
+      const remoteIds = remoteDCs.filter((dc) => dc.date === date).map((dc) => dc.task_id);
+      const localIds = await call<string[]>('get_daily_completions', { date });
+      for (const taskId of localIds) {
+        if (!remoteIds.includes(taskId)) {
+          await call('delete_daily_completion', { taskId, date });
+        }
+      }
+    }
+  }
+
   /** 加载本地数据，若已配对则从远端合并 */
   async function loadAll() {
     const [localTasks, _allTags] = await Promise.all([
@@ -250,9 +318,23 @@ export function useTaskStore() {
     if (isLoggedIn.value) {
       try {
         await syncCode.restoreProfile();
-        const remoteTasks = await pullTasks(true);
+        const [remoteTasks, remoteDCs] = await Promise.all([
+          pullTasks(true),
+          pullDailyCompletions(),
+        ]);
         if (remoteTasks.length > 0) {
           tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
+        }
+        if (remoteDCs.length > 0) {
+          // 清理远端已删除但本地残留的每日完成记录
+          await cleanStaleDailyCompletions(remoteDCs);
+          await call('sync_remote_daily_completions', {
+            remoteCompletions: remoteDCs.map((dc: { task_id: string; date: string }) => ({
+              task_id: dc.task_id,
+              date: dc.date,
+            })),
+          });
+          await refreshDailyCompletions();
         }
       } catch (e) {
         console.warn('[sync] loadAll pull failed:', e);
@@ -276,9 +358,23 @@ export function useTaskStore() {
 
     if (isLoggedIn.value) {
       try {
-        const remoteTasks = await pullTasks(true);
+        const [remoteTasks, remoteDCs] = await Promise.all([
+          pullTasks(true),
+          pullDailyCompletions(),
+        ]);
         if (remoteTasks.length > 0) {
           merged = mergeTasksLWW(merged, remoteTasks);
+        }
+        if (remoteDCs.length > 0) {
+          // 清理远端已删除但本地残留的每日完成记录
+          await cleanStaleDailyCompletions(remoteDCs);
+          await call('sync_remote_daily_completions', {
+            remoteCompletions: remoteDCs.map((dc: { task_id: string; date: string }) => ({
+              task_id: dc.task_id,
+              date: dc.date,
+            })),
+          });
+          await refreshDailyCompletions();
         }
       } catch (e) {
         console.warn('[sync] refreshTasks pull failed:', e);
@@ -310,15 +406,50 @@ export function useTaskStore() {
             tasks.value = tasks.value
               .map((t) => (t.id === remoteTask.id ? remoteTask : t))
               .filter((t) => !t.is_deleted);
+            // 安全网：当每日任务的 completed 被远端置为 false 时，
+            // 同步清理 dailyCompletedIds 和本地磁盘，防止 Realtime DELETE
+            // 事件因 REPLICA IDENTITY DEFAULT 丢失字段而被过滤掉
+            if (remoteTask.is_daily && !remoteTask.completed) {
+              dailyCompletedIds.value = dailyCompletedIds.value.filter(
+                (tid) => tid !== remoteTask.id,
+              );
+              // 同时清理本地磁盘，否则 refresh 会从磁盘读回旧数据
+              call('delete_daily_completion', { taskId: remoteTask.id, date: todayStr() });
+            }
+            // 正向安全网：当每日任务的 completed 被远端置为 true 时，
+            // 同步更新 dailyCompletedIds，防止 Realtime DC INSERT 事件延迟/丢失
+            if (remoteTask.is_daily && remoteTask.completed) {
+              if (!dailyCompletedIds.value.includes(remoteTask.id)) {
+                dailyCompletedIds.value = [...dailyCompletedIds.value, remoteTask.id];
+              }
+            }
           }
         } else if (!remoteTask.is_deleted) {
           tasks.value = [...tasks.value, remoteTask];
         }
         allTags.value = [...new Set(tasks.value.flatMap((t) => t.tags))].sort();
       },
-      (_dc) => {
-        // 远端每日完成变更：刷新本地
-        refreshDailyCompletions();
+      (dc, eventType) => {
+        // 乐观更新 UI：直接操作 dailyCompletedIds，不依赖 data.json 回读
+        // Rust 命令负责持久化，UI 不等待
+        if (eventType === 'DELETE') {
+          call('delete_daily_completion', { taskId: dc.task_id, date: dc.date });
+          if (dc.date === todayStr()) {
+            dailyCompletedIds.value = dailyCompletedIds.value.filter((tid) => tid !== dc.task_id);
+          }
+        } else {
+          call('sync_remote_daily_completions', {
+            remoteCompletions: [{ task_id: dc.task_id, date: dc.date }],
+          });
+          if (dc.date === todayStr() && !dailyCompletedIds.value.includes(dc.task_id)) {
+            // 竞态防护：若任务 completed 已为 false，说明取消完成的任务更新
+            // 已先于本 INSERT 到达，不应再将此任务加入 dailyCompletedIds
+            const task = tasks.value.find((t) => t.id === dc.task_id);
+            if (!task || task.completed) {
+              dailyCompletedIds.value = [...dailyCompletedIds.value, dc.task_id];
+            }
+          }
+        }
       },
     );
   }
@@ -393,8 +524,46 @@ export function useTaskStore() {
 
   async function toggleDailyTask(id: string, date: string) {
     try {
+      // 在 invoke 前捕获当前完成状态，判断操作类型
+      const wasCompleted = dailyCompletedIds.value.includes(id);
       await call('toggle_daily_task', { id, date });
-      await refreshDailyCompletions();
+      // 乐观更新 dailyCompletedIds，确保 UI 即时响应
+      if (wasCompleted) {
+        dailyCompletedIds.value = dailyCompletedIds.value.filter((tid) => tid !== id);
+      } else {
+        if (!dailyCompletedIds.value.includes(id)) {
+          dailyCompletedIds.value = [...dailyCompletedIds.value, id];
+        }
+      }
+
+      // 同步更新本地 task.completed 以匹配每日完成状态
+      const task = tasks.value.find((t) => t.id === id);
+      if (task) {
+        const newlyCompleted = !wasCompleted;
+        tasks.value = tasks.value.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                completed: newlyCompleted,
+                completed_at: newlyCompleted ? new Date().toISOString() : null,
+                updated_at: new Date().toISOString(),
+              }
+            : t,
+        );
+        const updated = tasks.value.find((t) => t.id === id);
+        if (updated) syncPush(updated);
+      }
+
+      // 推送/删除远端 DailyCompletion
+      if (wasCompleted) {
+        pushDeleteDailyCompletion(id, date).catch((e) =>
+          console.warn('[sync] pushDeleteDailyCompletion:', e),
+        );
+      } else {
+        pushDailyCompletion({ task_id: id, date }).catch((e) =>
+          console.warn('[sync] pushDailyCompletion:', e),
+        );
+      }
     } catch (e) {
       console.error('[toggleDailyTask] invoke failed, falling back to reload:', e);
       await loadAll();
