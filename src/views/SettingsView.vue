@@ -28,10 +28,10 @@ const { currentTheme, setTheme } = useTheme();
           <span>Prism Android</span>
           <span class="about-value">v0.1.0</span>
         </div>
-        <div class="about-row">
+        <!-- <div class="about-row">
           <span>技术栈</span>
           <span class="about-value">Tauri 2 + Vue 3 + Rust</span>
-        </div>
+        </div> -->
       </div>
     </section>
   </div>
