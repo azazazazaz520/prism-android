@@ -304,6 +304,14 @@ export function useTaskStore() {
 
   /** 加载本地数据，若已配对则从远端合并 */
   async function loadAll() {
+    // 跨天重置每日任务的 completed 状态，被修改的任务同步到 Supabase
+    const changedTasks = await call<Task[]>('reset_daily_tasks', { today: todayStr() });
+    if (isLoggedIn.value && changedTasks.length > 0) {
+      for (const t of changedTasks) {
+        pushTask(t).catch((e) => console.warn('[sync] push reset_daily:', e));
+      }
+    }
+
     const [localTasks, _allTags] = await Promise.all([
       call<Task[]>('get_tasks'),
       call<string[]>('get_all_tags'),
@@ -347,6 +355,14 @@ export function useTaskStore() {
    * 保持当前数据可见，避免"先闪本地再出远端"的闪烁。
    */
   async function refreshTasks() {
+    // 跨天重置每日任务的 completed 状态，被修改的任务同步到 Supabase
+    const changedTasks = await call<Task[]>('reset_daily_tasks', { today: todayStr() });
+    if (isLoggedIn.value && changedTasks.length > 0) {
+      for (const t of changedTasks) {
+        pushTask(t).catch((e) => console.warn('[sync] push reset_daily:', e));
+      }
+    }
+
     const [localTasks, _allTags] = await Promise.all([
       call<Task[]>('get_tasks'),
       call<string[]>('get_all_tags'),
