@@ -208,6 +208,24 @@ function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): T {
       }
       return undefined as T;
     }
+    case 'reset_daily_tasks': {
+      // 浏览器 mock：跨天清零每日任务的 completed 状态
+      const today = (args?.today as string) || todayStr();
+      const todayCompletions = loadMockDaily(today);
+      const changed: Task[] = [];
+      for (const task of mockTasks) {
+        if (!task.is_daily || task.is_deleted) continue;
+        const shouldComplete = todayCompletions.includes(task.id);
+        if (task.completed !== shouldComplete) {
+          task.completed = shouldComplete;
+          task.completed_at = shouldComplete ? new Date().toISOString() : null;
+          task.updated_at = new Date().toISOString();
+          changed.push({ ...task });
+        }
+      }
+      if (changed.length > 0) saveMockTasks(mockTasks);
+      return changed as T;
+    }
     default:
       return undefined as T;
   }
