@@ -337,8 +337,7 @@ export function useTaskStore() {
     allTags.value = _allTags;
     await refreshDailyCompletions();
 
-    // 先展示本地数据，防止远端慢/失败时黑屏
-    tasks.value = localTasks.filter((t) => !t.is_deleted);
+    let merged = localTasks.filter((t) => !t.is_deleted);
 
     // 恢复已配对的 profile，并尝试远端合并
     if (isLoggedIn.value) {
@@ -349,7 +348,7 @@ export function useTaskStore() {
           pullDailyCompletions(),
         ]);
         if (remoteTasks.length > 0) {
-          tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
+          merged = mergeTasksLWW(merged, remoteTasks);
         }
         if (remoteDCs.length > 0) {
           // 清理远端已删除但本地残留的每日完成记录
@@ -366,6 +365,8 @@ export function useTaskStore() {
         console.warn('[sync] loadAll pull failed:', e);
       }
     }
+
+    tasks.value = merged;
   }
 
   /**
