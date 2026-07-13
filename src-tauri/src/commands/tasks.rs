@@ -214,6 +214,44 @@ pub fn get_daily_completions(state: tauri::State<AppState>, date: String) -> Vec
         .collect()
 }
 
+/// 跨天重置每日任务的 completed 状态
+/// 返回被修改过的任务快照列表，供前端同步到 Supabase
+/// - 今日有完成记录 → completed = true
+/// - 今日无完成记录 → completed = false（昨日完成的自动清零）
+#[tauri::command]
+pub fn reset_daily_tasks(
+    state: tauri::State<AppState>,
+    today: String,
+) -> Result<Vec<store::Task>, String> {
+    let mut data = state.data.lock().unwrap();
+    let today_ids: Vec<String> = data
+        .daily_completions
+        .iter()
+        .filter(|dc| dc.date == today)
+        .map(|dc| dc.task_id.clone())
+        .collect();
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut changed = Vec::new();
+    for task in data.tasks.iter_mut() {
+        if !task.is_daily || task.is_deleted {
+            continue;
+        }
+        let should_be_completed = today_ids.contains(&task.id);
+        if task.completed != should_be_completed {
+            task.completed = should_be_completed;
+            task.completed_at = if should_be_completed {
+                Some(now.clone())
+            } else {
+                None
+            };
+            task.updated_at = now.clone();
+            changed.push(task.clone());
+        }
+    }
+    store::save_data(&data)?;
+    Ok(changed)
+}
+
 /// 合并远端每日完成记录到本地（按 task_id + date 去重）
 #[tauri::command]
 pub fn sync_remote_daily_completions(
