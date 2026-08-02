@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router';
 import { useTaskStore } from './composables/useTaskStore';
 import { useTheme } from './composables/useTheme';
 import { useAuth } from './composables/useAuth';
+import { useKeyboardViewport } from './composables/useKeyboardViewport';
+import { lastSyncAt, syncStatus } from './composables/useSync';
 
 /** 检测是否运行在 Tauri 原生环境中，用于条件加载平台 API */
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
@@ -13,6 +15,8 @@ const route = useRoute();
 const { loadAll, refreshTasks, initSync } = useTaskStore();
 const { load: loadTheme } = useTheme();
 const { initAuth } = useAuth();
+
+useKeyboardViewport();
 
 /**
  * 应用启动流程：
@@ -47,6 +51,21 @@ function currentTab(): string {
 function switchTab(name: string) {
   router.push({ name });
 }
+
+function syncLabel(): string {
+  switch (syncStatus.value) {
+    case 'syncing':
+      return '正在同步';
+    case 'offline':
+      return '离线，已保存到本机';
+    case 'error':
+      return '同步失败，点击重试';
+    case 'unauthorized':
+      return '同步未授权';
+    default:
+      return lastSyncAt.value ? '已同步' : '同步';
+  }
+}
 </script>
 
 <template>
@@ -54,7 +73,16 @@ function switchTab(name: string) {
     <!-- 顶部栏 -->
     <header class="top-bar">
       <h1 class="brand">Prism</h1>
-      <button class="sync-btn" aria-label="同步" @click="refreshTasks()">
+      <span v-if="syncStatus !== 'idle' || !lastSyncAt" class="sync-state" :class="syncStatus">
+        {{ syncLabel() }}
+      </span>
+      <button
+        class="sync-btn"
+        :class="{ syncing: syncStatus === 'syncing', error: syncStatus === 'error' }"
+        :aria-label="syncLabel()"
+        :title="syncLabel()"
+        @click="refreshTasks()"
+      >
         <svg
           width="20"
           height="20"
@@ -133,7 +161,9 @@ function switchTab(name: string) {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: var(--viewport-height, 100dvh);
+  max-height: 100%;
+  min-height: 0;
   background: var(--bg-primary);
 }
 
@@ -160,14 +190,43 @@ function switchTab(name: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  min-width: 48px;
+  min-height: 48px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+.sync-btn.syncing svg {
+  animation: sync-rotate 1s linear infinite;
+}
+
+.sync-btn.error {
+  color: var(--danger);
+}
+
+.sync-state {
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--space-sm);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-state.syncing {
+  color: var(--accent);
+}
+
+.sync-state.error,
+.sync-state.offline,
+.sync-state.unauthorized {
+  color: var(--danger);
 }
 
 .sync-btn:active {
@@ -178,8 +237,15 @@ function switchTab(name: string) {
 /* ── 主内容区 ──────────────────────────── */
 .main-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+@keyframes sync-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── 底部 Tab 导航 ────────────────────── */

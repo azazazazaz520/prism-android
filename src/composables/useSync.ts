@@ -28,8 +28,8 @@ function persistOfflineQueue(queue: OfflineQueueItem[]) {
 const offlineQueue: OfflineQueueItem[] = loadOfflineQueue();
 /** 同步状态指示器 */
 const isOnline = ref(navigator.onLine);
-const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>('idle');
-const lastSyncAt = ref<string | null>(null);
+export const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>('idle');
+export const lastSyncAt = ref<string | null>(null);
 
 /** 当前设备所属的 profile_id，由 useSyncCode 设置 */
 const currentProfileId = ref<string | null>(null);
@@ -175,11 +175,17 @@ export function useSync() {
     const profileId = getProfileId();
     if (!profileId) return [];
 
+    if (!isOnline.value) {
+      syncStatus.value = 'offline';
+      return [];
+    }
+
     const supabase = getSupabaseClient();
     const allTasks: Task[] = [];
     let cursor: string | undefined;
 
     try {
+      syncStatus.value = 'syncing';
       do {
         let query = supabase
           .from('tasks')
@@ -205,9 +211,11 @@ export function useSync() {
       } while (cursor);
 
       lastSyncAt.value = new Date().toISOString();
+      syncStatus.value = 'idle';
       return allTasks;
     } catch (e) {
       console.error('拉取远程任务失败:', e);
+      syncStatus.value = 'error';
       return allTasks.length > 0 ? allTasks : [];
     }
   }
@@ -287,6 +295,7 @@ export function useSync() {
 
   return {
     syncStatus,
+    isOnline,
     lastSyncAt,
     currentProfileId,
     getProfileId,

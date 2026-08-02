@@ -102,6 +102,7 @@ function resetSwipe(taskId: string) {
         <button
           class="swipe-delete-btn"
           :class="{ visible: (swipeState[task.id] || 0) <= SWIPE_THRESHOLD }"
+          aria-label="删除任务"
           @click="
             emit('delete', task.id);
             resetSwipe(task.id);
@@ -135,6 +136,7 @@ function resetSwipe(taskId: string) {
             v-if="task.is_daily"
             class="check-btn"
             :class="{ done: dailyCompletionsMap[task.id] }"
+            :aria-label="dailyCompletionsMap[task.id] ? '取消今日完成' : '标记今日完成'"
             @click="emit('toggle-daily', task.id, todayStr())"
           >
             <svg
@@ -155,6 +157,7 @@ function resetSwipe(taskId: string) {
             v-else
             class="check-btn"
             :class="{ done: task.completed }"
+            :aria-label="task.completed ? '标记未完成' : '标记完成'"
             @click="emit('toggle', task.id)"
           >
             <svg
@@ -184,7 +187,7 @@ function resetSwipe(taskId: string) {
               />
             </template>
             <template v-else>
-              <span class="task-title" @dblclick="startEdit(task.id, task.title)">
+              <span class="task-title">
                 {{ task.title }}
               </span>
               <div class="task-meta">
@@ -195,8 +198,24 @@ function resetSwipe(taskId: string) {
             </template>
           </div>
 
-          <!-- 删除按钮 -->
-          <button class="delete-btn" @click="emit('delete', task.id)">
+          <!-- 显式操作按钮，左滑作为快捷方式保留 -->
+          <button class="edit-btn" aria-label="编辑任务" @click="startEdit(task.id, task.title)">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
+
+          <button class="delete-btn" aria-label="删除任务" @click="emit('delete', task.id)">
             <svg
               width="16"
               height="16"
@@ -219,6 +238,7 @@ function resetSwipe(taskId: string) {
 <style scoped>
 .task-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-bottom: var(--space-sm);
 }
@@ -305,9 +325,9 @@ function resetSwipe(taskId: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
   border: 2px solid var(--border-default);
   border-radius: 50%;
   background: transparent;
@@ -381,14 +401,33 @@ function resetSwipe(taskId: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+.edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.edit-btn:active {
+  background: var(--accent-light);
+  color: var(--accent);
 }
 
 .delete-btn:active {

@@ -132,7 +132,7 @@ function onPullEnd() {
     />
 
     <!-- 底部输入条 -->
-    <TaskInput @add="addTask" />
+    <TaskInput :available-tags="allTags" @add="addTask" />
     <!-- 删除确认弹窗 -->
     <ConfirmDialog
       :show="showDeleteConfirm"
@@ -149,6 +149,7 @@ function onPullEnd() {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   padding: 0 var(--space-lg);
 }
 
