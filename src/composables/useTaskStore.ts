@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import type { Task } from '../types';
+import { todayStr } from '../utils/date';
 import { useSync } from './useSync';
 import { useAuth } from './useAuth';
 import { useSyncCode } from './useSyncCode';
@@ -15,7 +16,10 @@ const DC_KEY = 'prism_mock_daily';
 function loadMockTasks(): Task[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Task[];
+      return parsed.map((t) => ({ ...t, tags: Array.isArray(t.tags) ? t.tags : [] }));
+    }
   } catch {
     /* ignore */
   }
@@ -221,15 +225,6 @@ export function useTaskStore() {
     }
     // 确保 Vue 检测到变化
     return [...result];
-  });
-
-  const overdueCount = computed(() => {
-    const ts = todayStr();
-    return tasks.value.filter((t) => t.due_date && t.due_date < ts && !t.completed).length;
-  });
-
-  const pendingCount = computed(() => {
-    return tasks.value.filter((t) => !t.completed).length;
   });
 
   // ── 数据加载与同步 ──
@@ -512,9 +507,8 @@ export function useTaskStore() {
 
   function addTag(tag: string) {
     if (!allTags.value.includes(tag)) {
-      allTags.value.push(tag);
+      allTags.value = [...allTags.value, tag].sort();
     }
-    selectedTags.value = [tag];
   }
 
   return {
@@ -525,8 +519,6 @@ export function useTaskStore() {
     selectedTags,
     filteredTasks,
     dailyCompletionsMap,
-    overdueCount,
-    pendingCount,
     loadAll,
     refreshTasks,
     initSync,
@@ -541,12 +533,4 @@ export function useTaskStore() {
     toggleTag,
     addTag,
   };
-}
-
-function todayStr(): string {
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, '0');
-  const d = String(today.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }
