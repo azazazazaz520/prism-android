@@ -18,9 +18,9 @@
   /* 字号层级 */
   --text-h1: 20px;
   --text-h2: 16px;
-  --text-base: 14px;
-  --text-sm: 12px;
-  --text-xs: 11px;
+  --text-base: 16px;
+  --text-sm: 13px;
+  --text-xs: 12px;
 
   /* ── 背景（暗色模式默认） ──────────── */
   --bg-primary: #0f172a;

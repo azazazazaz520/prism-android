@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue';
+import { addDays, todayStr } from '../utils/date';
 
 const props = defineProps<{
   availableTags: string[];
@@ -23,19 +24,11 @@ const important = ref(false);
 const pinned = ref(false);
 const isDaily = ref(false);
 const expanded = ref(false);
+const showDetails = ref(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function selectDate(offset: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  dueDate.value = formatDate(date);
+  dueDate.value = addDays(offset);
 }
 
 function toggleTag(tag: string) {
@@ -48,6 +41,11 @@ function openComposer() {
   expanded.value = true;
 }
 
+function toggleDetails() {
+  expanded.value = true;
+  showDetails.value = !showDetails.value;
+}
+
 function focusComposer() {
   openComposer();
   nextTick(() => inputRef.value?.focus({ preventScroll: true }));
@@ -55,6 +53,7 @@ function focusComposer() {
 
 function closeComposer() {
   expanded.value = false;
+  showDetails.value = false;
   inputRef.value?.blur();
 }
 
@@ -85,7 +84,11 @@ function handleSubmit() {
 </script>
 
 <template>
-  <form class="task-input" :class="{ expanded }" @submit.prevent="handleSubmit">
+  <form
+    class="task-input"
+    :class="{ expanded, 'details-open': showDetails }"
+    @submit.prevent="handleSubmit"
+  >
     <div class="quick-row">
       <button type="submit" class="submit-btn" aria-label="添加任务">
         <svg
@@ -110,9 +113,12 @@ function handleSubmit() {
         placeholder="快速添加任务..."
         maxlength="200"
         autocomplete="off"
-        aria-describedby="task-input-hint"
+        aria-describedby="task-input-help"
         @focus="openComposer"
       />
+      <span id="task-input-help" class="sr-only">
+        输入任务标题后，可以设置截止日期、标签、重要、置顶和每日重复。
+      </span>
       <button
         v-if="expanded"
         type="submit"
@@ -120,18 +126,49 @@ function handleSubmit() {
         :disabled="!title.trim()"
         aria-label="保存任务"
       >
-        添加
+        保存
+      </button>
+      <button
+        v-if="expanded"
+        type="button"
+        class="details-btn"
+        :aria-expanded="showDetails"
+        aria-controls="task-detail-panel"
+        @click="toggleDetails"
+      >
+        {{ showDetails ? '收起' : '更多' }}
       </button>
     </div>
 
-    <div v-if="expanded" class="detail-panel" aria-label="任务选项">
+    <div
+      v-if="expanded && showDetails"
+      id="task-detail-panel"
+      class="detail-panel"
+      aria-label="任务选项"
+      role="group"
+    >
       <div class="detail-header">
         <div>
-          <strong>添加任务</strong>
-          <span id="task-input-hint">可选设置</span>
+          <strong>任务选项</strong>
+          <span>可选设置</span>
         </div>
-        <button type="button" class="close-btn" aria-label="收起任务详情" @click="closeComposer">
-          ×
+        <button
+          type="button"
+          class="close-btn"
+          aria-label="收起任务选项"
+          @click="showDetails = false"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </button>
       </div>
 
@@ -141,7 +178,7 @@ function handleSubmit() {
           <button
             type="button"
             class="option-chip"
-            :class="{ active: dueDate === formatDate(new Date()) }"
+            :class="{ active: dueDate === todayStr() }"
             @click="selectDate(0)"
           >
             今天
@@ -149,9 +186,7 @@ function handleSubmit() {
           <button
             type="button"
             class="option-chip"
-            :class="{
-              active: dueDate === formatDate(new Date(Date.now() + 24 * 60 * 60 * 1000)),
-            }"
+            :class="{ active: dueDate === addDays(1) }"
             @click="selectDate(1)"
           >
             明天
@@ -211,17 +246,18 @@ function handleSubmit() {
 
 .task-input.expanded {
   position: fixed;
-  z-index: 20;
-  right: 0;
-  bottom: calc(var(--keyboard-bottom-offset, 0px) + 64px);
-  left: 0;
-  max-height: calc(var(--viewport-height, 100dvh) - 72px);
-  padding: var(--space-md) max(var(--space-lg), env(safe-area-inset-left, 0px))
-    calc(var(--space-md) + env(safe-area-inset-bottom, 0px))
+  z-index: 30;
+  right: var(--space-md);
+  bottom: calc(var(--keyboard-bottom-offset, 0px) + var(--bottom-nav-height, 56px));
+  left: var(--space-md);
+  max-height: calc(
+    var(--viewport-height, 100dvh) - var(--bottom-nav-height, 56px) - var(--space-lg)
+  );
+  padding: var(--space-md) max(var(--space-lg), env(safe-area-inset-left, 0px)) var(--space-md)
     max(var(--space-lg), env(safe-area-inset-right, 0px));
   overflow: hidden;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
 
@@ -270,7 +306,6 @@ function handleSubmit() {
 
 .input-field:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
 .input-field::placeholder {
@@ -278,9 +313,10 @@ function handleSubmit() {
 }
 
 .add-btn,
+.details-btn,
 .close-btn,
 .clear-btn {
-  min-height: 44px;
+  min-height: 48px;
   border: none;
   background: transparent;
   color: var(--accent);
@@ -297,12 +333,23 @@ function handleSubmit() {
   color: var(--text-disabled);
 }
 
+.details-btn {
+  padding: 0 var(--space-xs);
+  color: var(--text-secondary);
+}
+
+.details-btn:active,
+.details-btn[aria-expanded='true'] {
+  color: var(--accent);
+}
+
 .close-btn {
-  width: 44px;
+  width: 48px;
   padding: 0;
   color: var(--text-muted);
-  font-size: 28px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .detail-panel {
@@ -310,12 +357,13 @@ function handleSubmit() {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
+  gap: var(--space-md);
+  padding: var(--space-md);
   overflow-y: auto;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
+  overscroll-behavior: contain;
 }
 
 .detail-header,
@@ -359,7 +407,7 @@ function handleSubmit() {
 }
 
 .option-chip {
-  min-height: 40px;
+  min-height: 48px;
   padding: 0 var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-full);
@@ -375,7 +423,7 @@ function handleSubmit() {
 }
 
 .date-input {
-  min-height: 40px;
+  min-height: 48px;
   max-width: 150px;
   padding: 0 var(--space-sm);
   border: 1px solid var(--border-default);
@@ -393,7 +441,7 @@ function handleSubmit() {
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 var(--space-md);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-full);
@@ -402,11 +450,19 @@ function handleSubmit() {
   font-size: var(--text-sm);
 }
 
+.option-chip,
+.date-input,
+.clear-btn,
+.toggle-option {
+  cursor: pointer;
+}
+
 .toggle-option input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
+  outline: none;
 }
 
 .toggle-option.selected {

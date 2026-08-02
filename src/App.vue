@@ -110,7 +110,7 @@ function syncLabel(): string {
     </main>
 
     <!-- 底部 Tab 导航 -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" aria-label="主导航">
       <button
         class="nav-item"
         :class="{ active: currentTab() === 'tasks' }"
@@ -159,6 +159,7 @@ function syncLabel(): string {
 
 <style scoped>
 .app-shell {
+  --bottom-nav-height: calc(56px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   height: var(--viewport-height, 100dvh);
