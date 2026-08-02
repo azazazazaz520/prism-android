@@ -106,6 +106,7 @@ docs/
 .agents/
 skills-lock.json
 AGENTS.md
+CLAUDE.md
 scripts/vision.cjs
 WORKFLOW_TEMPLATE.md
 .qoder/
