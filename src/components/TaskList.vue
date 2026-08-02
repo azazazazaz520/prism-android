@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { formatDueDate, todayStr } from '../utils/date';
 
 defineProps<{
   tasks: import('../types').Task[];
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 
 const editingId = ref<string | null>(null);
 const editTitle = ref('');
+const openActionsId = ref<string | null>(null);
 
 function startEdit(id: string, title: string) {
   editingId.value = id;
@@ -34,13 +36,36 @@ function cancelEdit() {
   editingId.value = null;
 }
 
-function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+function toggleActions(id: string) {
+  openActionsId.value = openActionsId.value === id ? null : id;
 }
+
+function closeActions() {
+  openActionsId.value = null;
+}
+
+function onDocumentPointerDown(e: PointerEvent) {
+  const target = e.target as Element | null;
+  if (target && !target.closest('.more-btn') && !target.closest('.task-actions')) {
+    closeActions();
+  }
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && openActionsId.value) {
+    closeActions();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown);
+  document.addEventListener('keydown', onKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown);
+  document.removeEventListener('keydown', onKeydown);
+});
 
 // ── 左滑删除手势 ──────────────────────────
 
@@ -137,7 +162,7 @@ function resetSwipe(taskId: string) {
             class="check-btn"
             :class="{ done: dailyCompletionsMap[task.id] }"
             :aria-label="dailyCompletionsMap[task.id] ? '取消今日完成' : '标记今日完成'"
-            @click="emit('toggle-daily', task.id, todayStr())"
+            @click.stop="emit('toggle-daily', task.id, todayStr())"
           >
             <svg
               v-if="dailyCompletionsMap[task.id]"
@@ -158,7 +183,7 @@ function resetSwipe(taskId: string) {
             class="check-btn"
             :class="{ done: task.completed }"
             :aria-label="task.completed ? '标记未完成' : '标记完成'"
-            @click="emit('toggle', task.id)"
+            @click.stop="emit('toggle', task.id)"
           >
             <svg
               v-if="task.completed"
@@ -191,44 +216,64 @@ function resetSwipe(taskId: string) {
                 {{ task.title }}
               </span>
               <div class="task-meta">
-                <span v-if="task.due_date" class="meta-tag due">{{ task.due_date }}</span>
-                <span v-for="tag in task.tags" :key="tag" class="meta-tag">{{ tag }}</span>
+                <span v-if="task.due_date" class="meta-tag due">{{
+                  formatDueDate(task.due_date)
+                }}</span>
+                <span v-for="tag in task.tags.slice(0, 2)" :key="tag" class="meta-tag">{{
+                  tag
+                }}</span>
+                <span v-if="task.tags.length > 2" class="meta-tag"
+                  >+{{ task.tags.length - 2 }}</span
+                >
+                <span v-if="task.important" class="meta-tag important-meta">重要</span>
+                <span v-if="task.pinned" class="meta-tag pinned-meta">置顶</span>
                 <span v-if="task.is_daily" class="meta-tag daily">每日</span>
               </div>
             </template>
           </div>
 
-          <!-- 显式操作按钮，左滑作为快捷方式保留 -->
-          <button class="edit-btn" aria-label="编辑任务" @click="startEdit(task.id, task.title)">
+          <!-- 默认只保留一个操作入口，左滑删除作为快捷方式保留 -->
+          <button
+            class="more-btn"
+            aria-label="任务操作"
+            :aria-expanded="openActionsId === task.id"
+            @click.stop="toggleActions(task.id)"
+          >
             <svg
-              width="16"
-              height="16"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              stroke-width="1.5"
+              stroke-width="2"
               stroke-linecap="round"
-              stroke-linejoin="round"
             >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+              <circle cx="5" cy="12" r="1" />
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
             </svg>
           </button>
 
-          <button class="delete-btn" aria-label="删除任务" @click="emit('delete', task.id)">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
+          <div v-if="openActionsId === task.id" class="task-actions">
+            <button
+              class="action-btn"
+              @click.stop="
+                startEdit(task.id, task.title);
+                openActionsId = null;
+              "
             >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+              编辑
+            </button>
+            <button
+              class="action-btn danger"
+              @click.stop="
+                emit('delete', task.id);
+                openActionsId = null;
+              "
+            >
+              删除
+            </button>
+          </div>
         </div>
       </div>
     </TransitionGroup>
@@ -303,6 +348,7 @@ function resetSwipe(taskId: string) {
   position: relative;
   z-index: 1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md);
@@ -317,7 +363,7 @@ function resetSwipe(taskId: string) {
 }
 
 .task-card.completed {
-  opacity: 0.5;
+  opacity: 0.68;
 }
 
 /* 勾选按钮 */
@@ -396,13 +442,14 @@ function resetSwipe(taskId: string) {
   outline: none;
 }
 
-/* 删除按钮 */
-.delete-btn {
+/* 更多操作 */
+.more-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
+  min-width: 48px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -411,27 +458,38 @@ function resetSwipe(taskId: string) {
   transition: all var(--transition-fast);
 }
 
-.edit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.edit-btn:active {
+.more-btn:active,
+.more-btn[aria-expanded='true'] {
   background: var(--accent-light);
   color: var(--accent);
 }
 
-.delete-btn:active {
-  background: var(--danger-light);
+.task-actions {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-light);
+}
+
+.action-btn {
+  min-width: 64px;
+  min-height: 48px;
+  padding: 0 var(--space-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.action-btn:active {
+  background: var(--accent-light);
+}
+
+.action-btn.danger {
   color: var(--danger);
 }
 
