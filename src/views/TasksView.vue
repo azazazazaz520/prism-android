@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useTaskStore } from '../composables/useTaskStore';
+import { todayStr } from '../utils/date';
 import DateStrip from '../components/DateStrip.vue';
 import TagChipBar from '../components/TagChipBar.vue';
 import TaskList from '../components/TaskList.vue';
@@ -14,8 +15,6 @@ const {
   selectedTags,
   filteredTasks,
   dailyCompletionsMap,
-  overdueCount,
-  pendingCount,
   loadAll,
   addTask,
   toggleTask,
@@ -27,6 +26,16 @@ const {
   toggleTag,
   addTag,
 } = useTaskStore();
+
+const visiblePendingCount = computed(
+  () => filteredTasks.value.filter((task) => !task.completed).length,
+);
+const visibleOverdueCount = computed(
+  () =>
+    filteredTasks.value.filter(
+      (task) => task.due_date && task.due_date < todayStr() && !task.completed,
+    ).length,
+);
 
 onMounted(() => {
   loadAll();
@@ -115,9 +124,11 @@ function onPullEnd() {
     />
 
     <!-- 统计摘要 -->
-    <div class="summary-row">
-      <span class="summary-text">{{ pendingCount }} 项待办</span>
-      <span v-if="overdueCount > 0" class="summary-overdue">{{ overdueCount }} 项已过期</span>
+    <div class="summary-row" aria-live="polite">
+      <span class="summary-text">{{ visiblePendingCount }} 项待办</span>
+      <span v-if="visibleOverdueCount > 0" class="summary-overdue">
+        {{ visibleOverdueCount }} 项已过期
+      </span>
     </div>
 
     <!-- 任务列表 -->

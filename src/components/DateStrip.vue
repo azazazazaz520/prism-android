@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Task } from '../types';
+import { todayStr } from '../utils/date';
 
 const props = defineProps<{
   tasks: Task[];
@@ -10,15 +11,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-date': [date: string | null];
 }>();
-
-/** 今天日期字符串 */
-function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 /** 生成最近 7 天的日期列表 */
 const dates = computed(() => {
