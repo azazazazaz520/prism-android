@@ -12,6 +12,9 @@ src-tauri/target/
 .env
 .env.local
 .env.*.local
+*.jks
+*.keystore
+keystore.properties
 
 # TypeScript
 *.tsbuildinfo

@@ -103,9 +103,71 @@ npm run tauri dev
 
 ### 5. 构建 APK
 
+日常界面开发使用热更新，不需要反复构建 APK：
+
 ```bash
-npm run tauri android build
+npm run tauri:android
 ```
+
+连接 Android 手机进行快速安装测试时，只构建常见的 ARM64 架构：
+
+```bash
+npm run tauri:android:debug
+npm run tauri:android:release
+```
+
+构建完成后会在同一目录生成 `prism.apk`。
+
+完整通用包才构建全部架构；它会明显更慢：
+
+```bash
+npm run tauri:android:universal
+```
+
+如果目标设备不是 ARM64，可将 `--target aarch64` 替换为 `armv7`、`i686` 或 `x86_64`。
+
+### Android APK 签名
+
+release APK 必须使用自己的 Android keystore 签名。不要把 keystore、密码或
+`keystore.properties` 提交到仓库。
+
+可以使用项目脚本生成一套本机发布密钥（密钥会放在用户目录，不会写入仓库）：
+
+```powershell
+npm run android:signing:create
+```
+
+也可以手动在仓库外生成密钥（Windows 示例）：
+
+```powershell
+keytool -genkeypair -v `
+  -keystore "$env:USERPROFILE\.prism-android\upload-keystore.jks" `
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+然后创建 `src-tauri/gen/android/keystore.properties`：
+
+```properties
+storeFile=C:/Users/<你的用户名>/.prism-android/upload-keystore.jks
+storePassword=<keystore密码>
+keyPassword=<key密码>
+keyAlias=upload
+```
+
+检查签名配置：
+
+```bash
+npm run android:signing:check
+```
+
+从项目根目录构建已签名 APK：
+
+```bash
+npm run tauri:android:release
+```
+
+构建脚本会在每次生成 Android 项目后自动接入签名配置；请同时备份 keystore 和密码，
+否则将无法发布后续更新。
 
 ## 跨设备同步
 
