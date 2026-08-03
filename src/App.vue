@@ -73,7 +73,7 @@ function syncLabel(): string {
     <!-- 顶部栏 -->
     <header class="top-bar">
       <h1 class="brand">Prism</h1>
-      <span v-if="syncStatus !== 'idle' || !lastSyncAt" class="sync-state" :class="syncStatus">
+      <span class="sync-state" :class="syncStatus">
         {{ syncLabel() }}
       </span>
       <button
@@ -173,18 +173,25 @@ function syncLabel(): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md) var(--space-lg);
-  padding-top: calc(var(--space-md) + env(safe-area-inset-top, 0px));
+  min-height: 96px;
+  padding: var(--space-xl) var(--space-xl);
+  padding-top: calc(var(--space-xl) + env(safe-area-inset-top, 0px));
+  padding-bottom: var(--space-xl);
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
   flex-shrink: 0;
 }
 
 .brand {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: var(--font-weight-bold);
   color: var(--accent);
   margin: 0;
+}
+
+.sync-btn svg {
+  width: 28px;
+  height: 28px;
 }
 
 .sync-btn {
@@ -215,7 +222,7 @@ function syncLabel(): string {
   margin-left: var(--space-sm);
   overflow: hidden;
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -272,7 +279,12 @@ function syncLabel(): string {
   font-size: var(--text-xs);
   cursor: pointer;
   transition: color var(--transition-fast);
-  min-height: 56px;
+  min-height: 64px;
+}
+
+.nav-item svg {
+  width: 28px;
+  height: 28px;
 }
 
 .nav-item.active {

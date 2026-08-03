@@ -110,7 +110,7 @@ function toggleFromPanel(tag: string) {
 }
 
 .tag-chip {
-  min-height: 40px;
+  min-height: 44px;
   padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
@@ -123,7 +123,7 @@ function toggleFromPanel(tag: string) {
 }
 
 .filter-toggle {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 var(--space-md);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-full);
@@ -145,9 +145,9 @@ function toggleFromPanel(tag: string) {
 }
 
 .tag-chip.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--accent-light);
+  border-color: var(--accent-muted);
+  color: var(--accent);
 }
 
 .selected-chip {

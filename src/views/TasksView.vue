@@ -5,7 +5,7 @@ import { todayStr } from '../utils/date';
 import DateStrip from '../components/DateStrip.vue';
 import TagChipBar from '../components/TagChipBar.vue';
 import TaskList from '../components/TaskList.vue';
-import TaskInput from '../components/TaskInput.vue';
+import TaskComposerSheet from '../components/TaskComposerSheet.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 
 const {
@@ -36,6 +36,13 @@ const visibleOverdueCount = computed(
       (task) => task.due_date && task.due_date < todayStr() && !task.completed,
     ).length,
 );
+
+const todayLabel = computed(() => {
+  const [, month, day] = todayStr().split('-');
+  return `今天 · ${Number(month)}月${Number(day)}日`;
+});
+
+const composerOpen = ref(false);
 
 onMounted(() => {
   loadAll();
@@ -94,6 +101,26 @@ function onPullEnd() {
   pullDistance.value = 0;
   isPulling.value = false;
 }
+
+function openComposer() {
+  composerOpen.value = true;
+}
+
+function closeComposer() {
+  composerOpen.value = false;
+}
+
+function handleTaskAdded(
+  title: string,
+  dueDate: string | null,
+  tags: string[],
+  important: boolean,
+  pinned: boolean,
+  isDaily: boolean,
+) {
+  addTask(title, dueDate, tags, important, pinned, isDaily);
+  closeComposer();
+}
 </script>
 
 <template>
@@ -112,6 +139,18 @@ function onPullEnd() {
       <span v-else class="pull-text">下拉刷新</span>
     </div>
 
+    <!-- 页面标题 -->
+    <header class="task-header">
+      <span class="task-eyebrow">{{ todayLabel }}</span>
+      <h1 class="view-title">全部任务</h1>
+      <div class="summary-row" aria-live="polite">
+        <span class="summary-text">{{ visiblePendingCount }} 项待办</span>
+        <span v-if="visibleOverdueCount > 0" class="summary-overdue">
+          {{ visibleOverdueCount }} 项已过期
+        </span>
+      </div>
+    </header>
+
     <!-- 日期条 -->
     <DateStrip :tasks="tasks" :selected-date="filterDate" @select-date="selectDate" />
 
@@ -122,14 +161,6 @@ function onPullEnd() {
       @toggle-tag="toggleTag"
       @add-tag="addTag"
     />
-
-    <!-- 统计摘要 -->
-    <div class="summary-row" aria-live="polite">
-      <span class="summary-text">{{ visiblePendingCount }} 项待办</span>
-      <span v-if="visibleOverdueCount > 0" class="summary-overdue">
-        {{ visibleOverdueCount }} 项已过期
-      </span>
-    </div>
 
     <!-- 任务列表 -->
     <TaskList
@@ -142,8 +173,19 @@ function onPullEnd() {
       @update-meta="updateTaskMeta"
     />
 
-    <!-- 底部输入条 -->
-    <TaskInput :available-tags="allTags" @add="addTask" />
+    <!-- 快速新增入口：点击后打开任务面板，不在列表页常驻输入框 -->
+    <button class="quick-add-button" type="button" @click="openComposer">
+      <span class="quick-add-icon" aria-hidden="true">+</span>
+      <span>快速添加任务</span>
+    </button>
+
+    <TaskComposerSheet
+      v-if="composerOpen"
+      :available-tags="allTags"
+      @add="handleTaskAdded"
+      @close="closeComposer"
+    />
+
     <!-- 删除确认弹窗 -->
     <ConfirmDialog
       :show="showDeleteConfirm"
@@ -161,7 +203,7 @@ function onPullEnd() {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 0 var(--space-lg);
+  padding: 0 var(--space-xl);
 }
 
 .pull-indicator {
@@ -177,15 +219,36 @@ function onPullEnd() {
   color: var(--text-muted);
 }
 
+.task-header {
+  padding: var(--space-xl) 0 var(--space-sm);
+}
+
+.task-eyebrow {
+  display: block;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+}
+
+.view-title {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-primary);
+  font-size: clamp(30px, 8vw, 38px);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
 .summary-row {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-sm) 0;
+  padding: var(--space-sm) 0 0;
 }
 
 .summary-text {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--text-muted);
 }
 
@@ -195,5 +258,52 @@ function onPullEnd() {
   background: var(--danger-light);
   padding: 2px var(--space-sm);
   border-radius: var(--radius-full);
+}
+
+.quick-add-button {
+  position: fixed;
+  right: var(--space-xl);
+  bottom: calc(var(--bottom-nav-height, 64px) + var(--space-lg));
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 56px;
+  padding: 0 var(--space-lg) 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-full);
+  color: #fff;
+  background: var(--accent);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.quick-add-button:active {
+  transform: scale(0.96);
+  background: var(--accent-hover);
+}
+
+.quick-add-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: #fff;
+  font-size: 28px;
+  font-weight: var(--font-weight-normal);
+  line-height: 1;
+}
+
+@media (max-width: 520px) {
+  .quick-add-button {
+    right: var(--space-lg);
+  }
 }
 </style>

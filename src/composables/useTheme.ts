@@ -7,7 +7,7 @@ const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNA
 
 /** 浏览器 mock：主题存 localStorage */
 function getLocalTheme(): Theme {
-  return (localStorage.getItem('prism_theme') as Theme) || 'auto';
+  return (localStorage.getItem('prism_theme') as Theme) || 'light';
 }
 
 function setLocalTheme(theme: Theme) {
@@ -15,7 +15,7 @@ function setLocalTheme(theme: Theme) {
 }
 
 /** 主题状态（全局单例 ref） */
-const currentTheme = ref<Theme>('auto');
+const currentTheme = ref<Theme>('light');
 
 /** 主题 composable：管理 data-theme 属性切换与持久化 */
 export function useTheme() {
@@ -36,7 +36,7 @@ export function useTheme() {
         applyTheme(getLocalTheme());
       }
     } catch {
-      applyTheme('auto');
+      applyTheme('light');
     }
   }
 

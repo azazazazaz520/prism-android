@@ -34,11 +34,6 @@ const dates = computed(() => {
   return result;
 });
 
-/** 某日期有多少个任务 */
-function taskCount(date: string): number {
-  return props.tasks.filter((t) => t.due_date === date && !t.completed).length;
-}
-
 function handleSelect(date: string) {
   if (props.selectedDate === date) {
     emit('select-date', null);
@@ -59,7 +54,6 @@ function handleSelect(date: string) {
     >
       <span class="day-name">{{ d.dayName }}</span>
       <span class="day-label">{{ d.label }}</span>
-      <span v-if="taskCount(d.date) > 0" class="day-badge">{{ taskCount(d.date) }}</span>
     </button>
   </div>
 </template>
@@ -67,8 +61,8 @@ function handleSelect(date: string) {
 <style scoped>
 .date-strip {
   display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-md) 0;
+  gap: 7px;
+  padding: var(--space-md) 0 var(--space-lg);
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -82,13 +76,14 @@ function handleSelect(date: string) {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 48px;
-  padding: var(--space-sm) var(--space-md);
+  min-width: 64px;
+  min-height: 64px;
+  padding: 8px 10px;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: 12px;
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -99,9 +94,9 @@ function handleSelect(date: string) {
 }
 
 .date-chip.active {
-  background: var(--accent);
+  background: var(--accent-light);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent);
 }
 
 .date-chip.today:not(.active) {
@@ -109,25 +104,12 @@ function handleSelect(date: string) {
 }
 
 .day-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   opacity: 0.7;
 }
 
 .day-label {
+  font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
-}
-
-.day-badge {
-  font-size: 10px;
-  background: rgba(255, 255, 255, 0.2);
-  color: inherit;
-  border-radius: var(--radius-full);
-  padding: 1px 5px;
-  min-width: 16px;
-  text-align: center;
-}
-
-.active .day-badge {
-  background: rgba(255, 255, 255, 0.3);
 }
 </style>

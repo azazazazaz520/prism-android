@@ -284,16 +284,20 @@ function resetSwipe(taskId: string) {
 .task-list {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  padding-bottom: var(--space-sm);
+  padding-bottom: calc(96px + var(--space-sm));
 }
 
 .empty-state {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2xl);
+  min-height: 320px;
+  padding: var(--space-2xl) var(--space-lg) 96px;
   color: var(--text-muted);
   font-size: var(--text-base);
 }
@@ -314,7 +318,7 @@ function resetSwipe(taskId: string) {
 .task-row {
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 
 .swipe-delete-btn {
@@ -329,7 +333,7 @@ function resetSwipe(taskId: string) {
   background: var(--danger);
   color: #fff;
   border: none;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   cursor: pointer;
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -350,11 +354,12 @@ function resetSwipe(taskId: string) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
+  gap: var(--space-sm);
+  min-height: 60px;
+  padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-sm);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   transition: transform 0.2s ease-out;
 }
 
@@ -368,24 +373,43 @@ function resetSwipe(taskId: string) {
 
 /* 勾选按钮 */
 .check-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
   min-width: 48px;
-  border: 2px solid var(--border-default);
-  border-radius: 50%;
+  border: none;
+  border-radius: var(--radius-full);
   background: transparent;
-  color: var(--success);
+  color: #fff;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
+.check-btn::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-default);
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
 .check-btn.done {
-  background: var(--success);
+  background: transparent;
+}
+
+.check-btn.done::before {
   border-color: var(--success);
-  color: #fff;
+  background: var(--success);
+}
+
+.check-btn svg {
+  position: absolute;
+  width: 14px;
+  height: 14px;
 }
 
 /* 任务内容 */
@@ -396,6 +420,7 @@ function resetSwipe(taskId: string) {
 
 .task-title {
   font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   line-height: 1.4;
   word-break: break-word;

@@ -13,6 +13,20 @@ const router = createRouter({
       name: 'settings',
       component: () => import('./views/SettingsView.vue'),
     },
+    ...(import.meta.env.DEV
+      ? [
+          {
+            path: '/prototype/tasks-ui',
+            name: 'tasks-ui-prototype',
+            component: () => import('./prototype/TaskUiPrototype.vue'),
+          },
+          {
+            path: '/prototype/shadcn-task',
+            name: 'shadcn-task-prototype',
+            component: () => import('./prototype/ShadcnTaskPreview.vue'),
+          },
+        ]
+      : []),
   ],
 });
 
