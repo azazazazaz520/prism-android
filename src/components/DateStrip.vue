@@ -62,6 +62,7 @@ function handleSelect(date: string) {
 .date-strip {
   display: flex;
   gap: 7px;
+  min-width: 0;
   padding: var(--space-md) 0 var(--space-lg);
   overflow-x: auto;
   scrollbar-width: none;
@@ -111,5 +112,27 @@ function handleSelect(date: string) {
 .day-label {
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 560px) {
+  .date-strip {
+    gap: 6px;
+    padding: 10px 0 12px;
+  }
+
+  .date-chip {
+    min-width: 58px;
+    min-height: 58px;
+    padding: 6px 8px;
+    border-radius: var(--radius-md);
+  }
+
+  .day-name {
+    font-size: 12px;
+  }
+
+  .day-label {
+    font-size: 14px;
+  }
 }
 </style>

@@ -14,37 +14,19 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 
-function createQueryBuilder(returns: any = null) {
-  const eq = vi.fn(function (this: any) {
-    return this;
-  });
-  const single = vi.fn().mockResolvedValue(returns);
-  const maybeSingle = vi.fn().mockResolvedValue(returns);
-  const select = vi.fn(function (this: any) {
-    return this;
-  });
-  const insert = vi.fn(function (this: any) {
-    return this;
-  });
-  const upsert = vi.fn().mockResolvedValue({ error: null });
-  const builder: any = { eq, single, maybeSingle, select, insert, upsert };
-  [eq, select, insert].forEach((fn) => {
-    fn.mockReturnValue(builder);
-  });
-  return builder;
-}
-
-let mockBuilder = createQueryBuilder({ data: { id: 'profile-123' }, error: null });
-const mockSupabaseFrom = vi.fn().mockReturnValue(mockBuilder);
+const mockInvoke = vi.fn();
+const mockSupabaseClient = {
+  functions: { invoke: mockInvoke },
+};
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({ from: mockSupabaseFrom }),
+  createClient: () => mockSupabaseClient,
 }));
 
 let mockUser: any = { id: 'test-user-id' };
 let mockIsLoggedIn = true;
 vi.mock('../useAuth', () => ({
   useAuth: () => ({ user: { value: mockUser }, isLoggedIn: { value: mockIsLoggedIn } }),
-  getSupabaseClient: () => ({ from: mockSupabaseFrom }),
+  getSupabaseClient: () => mockSupabaseClient,
 }));
 
 let mockProfileId: string | null = null;
@@ -73,8 +55,8 @@ describe('useSyncCode', () => {
     mockIsLoggedIn = true;
     (window as any).__mockSyncCode = null;
 
-    mockBuilder = createQueryBuilder({ data: { id: 'profile-123' }, error: null });
-    mockSupabaseFrom.mockReturnValue(mockBuilder);
+    mockInvoke.mockReset();
+    mockInvoke.mockResolvedValue({ data: { profile_id: 'profile-123' }, error: null });
   });
 
   it('should generate sync code and set profile', async () => {
@@ -83,6 +65,9 @@ describe('useSyncCode', () => {
 
     expect(code).toBeTruthy();
     expect(mockProfileId).toBe('profile-123');
+    expect(mockInvoke).toHaveBeenCalledWith('pair-profile', {
+      body: expect.objectContaining({ action: 'create', sync_code: code }),
+    });
   });
 
   it('should join profile and set profile', async () => {
@@ -90,15 +75,39 @@ describe('useSyncCode', () => {
     await sync.joinProfile('existing-code');
 
     expect(mockProfileId).toBe('profile-123');
+    expect(mockInvoke).toHaveBeenCalledWith('pair-profile', {
+      body: { action: 'join', sync_code: 'existing-code' },
+    });
   });
 
   it('should throw on invalid sync code', async () => {
-    const badBuilder = createQueryBuilder({ data: null, error: { message: 'Not found' } });
-    mockSupabaseFrom.mockReturnValue(badBuilder);
+    mockInvoke.mockResolvedValue({ data: null, error: { message: 'Not found' } });
 
     const sync = useSyncCode();
     await expect(sync.joinProfile('bad-code')).rejects.toThrow('同步码无效');
     expect(mockProfileId).toBeNull();
+  });
+
+  it('should restore profile through the protected pairing endpoint', async () => {
+    (window as any).__mockSyncCode = 'existing-code';
+
+    const sync = useSyncCode();
+    await expect(sync.restoreProfile()).resolves.toBe(true);
+
+    expect(mockProfileId).toBe('profile-123');
+    expect(mockInvoke).toHaveBeenCalledWith('pair-profile', {
+      body: { action: 'join', sync_code: 'existing-code' },
+    });
+  });
+
+  it('should update sync code through the protected pairing endpoint', async () => {
+    const sync = useSyncCode();
+    await sync.updateSyncCode(' new-code ');
+
+    expect(mockProfileId).toBe('profile-123');
+    expect(mockInvoke).toHaveBeenCalledWith('pair-profile', {
+      body: { action: 'join', sync_code: 'new-code' },
+    });
   });
 
   it('should detect when no profile exists', async () => {

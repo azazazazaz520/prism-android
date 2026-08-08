@@ -118,7 +118,7 @@ function resetSwipe(taskId: string) {
   <div class="task-list">
     <div v-if="tasks.length === 0" class="empty-state">
       <p>暂无任务</p>
-      <p class="empty-hint">点击下方输入框添加新任务</p>
+      <p class="empty-hint">点击右上角新增任务，开始安排今天。</p>
     </div>
 
     <TransitionGroup name="task-list" tag="div" class="task-items">
@@ -282,12 +282,13 @@ function resetSwipe(taskId: string) {
 
 <style scoped>
 .task-list {
-  flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  padding-bottom: calc(96px + var(--space-sm));
+  overflow: visible;
+  padding-bottom: 0;
 }
 
 .empty-state {
@@ -296,14 +297,19 @@ function resetSwipe(taskId: string) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 320px;
-  padding: var(--space-2xl) var(--space-lg) 96px;
+  min-height: 220px;
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-2xl) var(--space-lg);
   color: var(--text-muted);
   font-size: var(--text-base);
+  text-align: center;
 }
 
 .empty-hint {
+  max-width: 280px;
   font-size: var(--text-sm);
+  line-height: 1.5;
   margin-top: var(--space-xs);
   opacity: 0.6;
 }
@@ -357,7 +363,7 @@ function resetSwipe(taskId: string) {
   gap: var(--space-sm);
   min-height: 60px;
   padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-sm);
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   transition: transform 0.2s ease-out;
@@ -530,5 +536,17 @@ function resetSwipe(taskId: string) {
 .task-list-leave-to {
   opacity: 0;
   transform: translateX(24px);
+}
+
+@media (max-width: 560px) {
+  .empty-state {
+    min-height: 140px;
+    padding: 16px 8px;
+    font-size: 15px;
+  }
+
+  .empty-hint {
+    max-width: 220px;
+  }
 }
 </style>

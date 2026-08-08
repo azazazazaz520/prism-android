@@ -54,6 +54,20 @@ export function useSyncCode() {
     return call<string | null>('get_sync_code');
   }
 
+  /** 通过受保护的 Edge Function 创建或加入 profile，避免直接读取同步码表。 */
+  async function pairProfile(action: 'create' | 'join', syncCode: string): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('pair-profile', {
+      body: { action, sync_code: syncCode.trim() },
+    });
+
+    if (error || !data?.profile_id) {
+      throw new Error(action === 'join' ? '同步码无效，请检查后重试' : '生成同步码失败');
+    }
+
+    return data.profile_id as string;
+  }
+
   /** 判断当前设备是否已配对 */
   async function hasProfile(): Promise<boolean> {
     const code = await getSyncCode();
@@ -72,29 +86,11 @@ export function useSyncCode() {
 
     try {
       const code = generateUUID();
-      const supabase = getSupabaseClient();
-      if (!supabase) throw new Error('Supabase 客户端未初始化');
-
-      // 创建 profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .insert({ sync_code: code })
-        .select('id')
-        .single();
-
-      if (profileError) throw profileError;
-
-      // 创建 user_profile 映射
-      const { error: mappingError } = await supabase.from('user_profiles').insert({
-        user_id: user.value.id,
-        profile_id: profile.id,
-      });
-
-      if (mappingError) throw mappingError;
+      const profileId = await pairProfile('create', code);
 
       // 持久化同步码到本地配置
       await call('set_sync_code', { code });
-      setProfileId(profile.id);
+      setProfileId(profileId);
 
       return code;
     } catch (e) {
@@ -116,44 +112,14 @@ export function useSyncCode() {
     pairError.value = null;
 
     try {
-      const supabase = getSupabaseClient();
-      if (!supabase) throw new Error('Supabase 客户端未初始化');
-
-      // 查找 profile
-      const { data: profile, error: findError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('sync_code', syncCode)
-        .single();
-
-      if (findError || !profile) {
-        throw new Error('同步码无效，请检查后重试');
-      }
-
-      // 检查是否已加入
-      const { data: existing } = await supabase
-        .from('user_profiles')
-        .select('user_id')
-        .eq('user_id', user.value.id)
-        .eq('profile_id', profile.id)
-        .maybeSingle();
-
-      if (!existing) {
-        // 创建映射
-        const { error: mappingError } = await supabase.from('user_profiles').insert({
-          user_id: user.value.id,
-          profile_id: profile.id,
-        });
-
-        if (mappingError) throw mappingError;
-      }
+      const profileId = await pairProfile('join', syncCode);
 
       // 持久化
-      await call('set_sync_code', { code: syncCode });
-      setProfileId(profile.id);
+      await call('set_sync_code', { code: syncCode.trim() });
+      setProfileId(profileId);
 
       // 将本地无 profile_id 的任务关联到该 profile 并推送
-      await mergeLocalToProfile(profile.id);
+      await mergeLocalToProfile(profileId);
     } catch (e) {
       const message = e instanceof Error ? e.message : '配对失败';
       pairError.value = message;
@@ -201,18 +167,9 @@ export function useSyncCode() {
     const code = await getSyncCode();
     if (!code) return false;
 
-    const supabase = getSupabaseClient();
-
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('sync_code', code)
-        .single();
-
-      if (error || !profile) return false;
-
-      setProfileId(profile.id);
+      const profileId = await pairProfile('join', code);
+      setProfileId(profileId);
       return true;
     } catch {
       return false;
@@ -232,40 +189,11 @@ export function useSyncCode() {
     pairError.value = null;
 
     try {
-      const supabase = getSupabaseClient();
-      if (!supabase) throw new Error('Supabase 客户端未初始化');
-
-      // 查找新 profile
-      const { data: profile, error: findError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('sync_code', trimmed)
-        .single();
-
-      if (findError || !profile) {
-        throw new Error('同步码无效，请检查后重试');
-      }
-
-      // 检查是否已在目标 profile 中
-      const { data: existing } = await supabase
-        .from('user_profiles')
-        .select('user_id')
-        .eq('user_id', user.value.id)
-        .eq('profile_id', profile.id)
-        .maybeSingle();
-
-      if (!existing) {
-        const { error: mappingError } = await supabase.from('user_profiles').insert({
-          user_id: user.value.id,
-          profile_id: profile.id,
-        });
-
-        if (mappingError) throw mappingError;
-      }
+      const profileId = await pairProfile('join', trimmed);
 
       // 持久化新同步码
       await call('set_sync_code', { code: trimmed });
-      setProfileId(profile.id);
+      setProfileId(profileId);
     } catch (e) {
       const message = e instanceof Error ? e.message : '编辑同步码失败';
       pairError.value = message;
