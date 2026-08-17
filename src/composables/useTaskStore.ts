@@ -141,6 +141,33 @@ function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): T {
       saveMockDaily(date, dc);
       return undefined as T;
     }
+    case 'set_task_completed': {
+      const t = mockTasks.find((x) => x.id === (args?.id as string));
+      if (t) {
+        t.completed = !!args?.completed;
+        t.completed_at = t.completed ? new Date().toISOString() : null;
+        t.updated_at = new Date().toISOString();
+      }
+      saveMockTasks(mockTasks);
+      return undefined as T;
+    }
+    case 'add_daily_completion': {
+      const tid = args?.id as string,
+        date = args?.date as string;
+      const dc = loadMockDaily(date);
+      if (!dc.includes(tid)) dc.push(tid);
+      saveMockDaily(date, dc);
+      return undefined as T;
+    }
+    case 'remove_daily_completion': {
+      const tid = args?.id as string,
+        date = args?.date as string;
+      saveMockDaily(
+        date,
+        loadMockDaily(date).filter((x) => x !== tid),
+      );
+      return undefined as T;
+    }
     case 'update_task': {
       const ua = args?.args as Record<string, unknown> | undefined;
       const t = mockTasks.find((x) => x.id === (ua?.id as string));
@@ -203,7 +230,14 @@ export function mergeTasksLWW(local: Task[], remote: Task[]): Task[] {
 /** 任务看板 composable：核心数据 + 筛选 + CRUD + 同步 */
 export function useTaskStore() {
   const { isLoggedIn } = useAuth();
-  const { pushTask, pullTasks, subscribeToChanges } = useSync();
+  const {
+    pushTask,
+    pullTasks,
+    pullDailyCompletions,
+    subscribeToChanges,
+    pushDailyCompletion,
+    removeDailyCompletion,
+  } = useSync();
   const syncCode = useSyncCode();
 
   const dailyCompletionsMap = computed(() => {
@@ -243,15 +277,20 @@ export function useTaskStore() {
 
     // 恢复已配对的 profile，并尝试远端合并
     if (isLoggedIn.value) {
+      let remoteTasks: Task[] = [];
       try {
         await syncCode.restoreProfile();
-        const remoteTasks = await pullTasks(true);
+        remoteTasks = await pullTasks(true);
         if (remoteTasks.length > 0) {
           tasks.value = mergeTasksLWW(tasks.value, remoteTasks);
         }
       } catch (e) {
         console.warn('[sync] loadAll pull failed:', e);
       }
+      // 每日任务以远端 task.completed 为准，对账本地每日完成记录（与桌面端模型一致）
+      await reconcileDailyTasks(remoteTasks, tasks.value);
+      // 每日完成记录兜底：与远端记录双向对账，弥补离线期间漏收的 Realtime
+      await mergeRemoteDailyCompletions();
     }
   }
 
@@ -270,14 +309,19 @@ export function useTaskStore() {
     let merged = localTasks.filter((t) => !t.is_deleted);
 
     if (isLoggedIn.value) {
+      let remoteTasks: Task[] = [];
       try {
-        const remoteTasks = await pullTasks(true);
+        remoteTasks = await pullTasks(true);
         if (remoteTasks.length > 0) {
           merged = mergeTasksLWW(merged, remoteTasks);
         }
       } catch (e) {
         console.warn('[sync] refreshTasks pull failed:', e);
       }
+      // 每日任务以远端 task.completed 为准，对账本地每日完成记录（与桌面端模型一致）
+      await reconcileDailyTasks(remoteTasks, merged);
+      // 每日完成记录兜底：与远端记录双向对账，弥补离线期间漏收的 Realtime
+      await mergeRemoteDailyCompletions();
     }
 
     // 仅在结果有变化时替换，避免无关更新触发重渲染
@@ -310,10 +354,21 @@ export function useTaskStore() {
           tasks.value = [...tasks.value, remoteTask];
         }
         allTags.value = [...new Set(tasks.value.flatMap((t) => t.tags))].sort();
+        // 每日任务：本地完成记录跟随远端 task.completed（桌面端模型）
+        void reconcileDailyTasks([remoteTask]);
       },
-      (_dc) => {
-        // 远端每日完成变更：刷新本地
-        refreshDailyCompletions();
+      async (dc, eventType) => {
+        // 远端每日完成变更：写入本地存储再刷新（INSERT/UPDATE → 添加，DELETE → 移除）
+        try {
+          if (eventType === 'DELETE') {
+            await call('remove_daily_completion', { id: dc.task_id, date: dc.date });
+          } else {
+            await call('add_daily_completion', { id: dc.task_id, date: dc.date });
+          }
+          await refreshDailyCompletions();
+        } catch (e) {
+          console.warn('[sync] apply remote daily completion failed:', e);
+        }
       },
     );
   }
@@ -322,6 +377,70 @@ export function useTaskStore() {
     dailyCompletedIds.value = await call<string[]>('get_daily_completions', {
       date: todayStr(),
     });
+  }
+
+  /**
+   * 以远端 task.completed 为准，对账每日任务的本地完成记录（与桌面端模型一致）。
+   * LWW 保护：仅当远端不是旧版本时应用，避免覆盖本地更新的完成状态。
+   */
+  async function reconcileDailyTasks(remoteTasks: Task[], lookup: Task[] = tasks.value) {
+    if (!isLoggedIn.value || remoteTasks.length === 0) return;
+    const toAdd: string[] = [];
+    const toRemove: string[] = [];
+    for (const remoteTask of remoteTasks) {
+      if (!remoteTask.is_daily || remoteTask.is_deleted) continue;
+      const local = lookup.find((t) => t.id === remoteTask.id);
+      if (local && new Date(remoteTask.updated_at) < new Date(local.updated_at)) continue;
+      if (remoteTask.completed) toAdd.push(remoteTask.id);
+      else toRemove.push(remoteTask.id);
+    }
+    if (toAdd.length === 0 && toRemove.length === 0) return;
+    try {
+      for (const id of toAdd) {
+        await call('add_daily_completion', { id, date: todayStr() });
+      }
+      for (const id of toRemove) {
+        await call('remove_daily_completion', { id, date: todayStr() });
+      }
+      await refreshDailyCompletions();
+    } catch (e) {
+      console.warn('[sync] reconcile daily tasks failed:', e);
+    }
+  }
+
+  /**
+   * 拉取远端今日每日完成记录，与本地双向对账（补缺失、清多余）。
+   * 以本地 task.completed 为裁决：任务明确未完成时不清除记录、任务明确已完成时不移除记录，
+   * 避免与 reconcileDailyTasks 相互打架（对应桌面端 dc 行删除失败后残留的场景）。
+   */
+  async function mergeRemoteDailyCompletions() {
+    if (!isLoggedIn.value) return;
+    try {
+      const remoteIds = await pullDailyCompletions(todayStr());
+      const localIds = dailyCompletedIds.value;
+      const toAdd = remoteIds.filter((id) => {
+        if (localIds.includes(id)) return false;
+        // 本地任务明确未完成时，以 task.completed 为准，不复活远端残留记录
+        const task = tasks.value.find((t) => t.id === id);
+        return !task || task.completed;
+      });
+      const toRemove = localIds.filter((id) => {
+        if (remoteIds.includes(id)) return false;
+        // 本地任务明确已完成时，保留记录，等待任务状态同步
+        const task = tasks.value.find((t) => t.id === id);
+        return !task || !task.completed;
+      });
+      if (toAdd.length === 0 && toRemove.length === 0) return;
+      for (const id of toAdd) {
+        await call('add_daily_completion', { id, date: todayStr() });
+      }
+      for (const id of toRemove) {
+        await call('remove_daily_completion', { id, date: todayStr() });
+      }
+      await refreshDailyCompletions();
+    } catch (e) {
+      console.warn('[sync] merge daily completions failed:', e);
+    }
   }
 
   // ── 任务 CRUD ──
@@ -388,8 +507,42 @@ export function useTaskStore() {
 
   async function toggleDailyTask(id: string, date: string) {
     try {
+      const wasCompleted = dailyCompletedIds.value.includes(id);
       await call('toggle_daily_task', { id, date });
       await refreshDailyCompletions();
+      const newlyCompleted = !wasCompleted;
+
+      // 与桌面端模型对齐：每日任务的完成状态也写入 task.completed 并推送。
+      // 桌面端以 task.completed 为每日任务的远端真源，不推会导致桌面端收不到本端操作。
+      const task = tasks.value.find((t) => t.id === id);
+      if (task) {
+        await call('set_task_completed', { id, completed: newlyCompleted });
+        tasks.value = tasks.value.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                completed: newlyCompleted,
+                completed_at: newlyCompleted ? new Date().toISOString() : null,
+                updated_at: new Date().toISOString(),
+              }
+            : t,
+        );
+        const updated = tasks.value.find((t) => t.id === id);
+        if (updated) syncPush(updated);
+      }
+
+      // 同步每日完成记录到远端（完成 → upsert，取消 → delete），保证跨设备一致
+      if (isLoggedIn.value) {
+        if (newlyCompleted) {
+          pushDailyCompletion({ task_id: id, date }).catch((e) =>
+            console.warn('[sync] pushDailyCompletion:', e),
+          );
+        } else {
+          removeDailyCompletion(id, date).catch((e) =>
+            console.warn('[sync] removeDailyCompletion:', e),
+          );
+        }
+      }
     } catch (e) {
       console.error('[toggleDailyTask] invoke failed, falling back to reload:', e);
       await loadAll();

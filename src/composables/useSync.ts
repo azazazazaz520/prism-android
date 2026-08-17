@@ -7,7 +7,7 @@ import type { Task, DailyCompletion } from '../types';
 const OFFLINE_QUEUE_KEY = 'prism_offline_queue';
 
 interface OfflineQueueItem {
-  type: 'upsert';
+  type: 'upsert' | 'delete';
   table: string;
   data: Record<string, unknown>;
 }
@@ -168,6 +168,43 @@ export function useSync() {
     }
   }
 
+  /** 同步删除每日完成记录（取消勾选每日任务时调用） */
+  async function removeDailyCompletion(taskId: string, date: string): Promise<void> {
+    const uid = userId();
+    if (!uid) return;
+    const profileId = getProfileId();
+    const supabase = getSupabaseClient();
+
+    if (!isOnline.value) {
+      offlineQueue.push({
+        type: 'delete',
+        table: 'daily_completions',
+        data: { task_id: taskId, date, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('daily_completions')
+        .delete()
+        .eq('task_id', taskId)
+        .eq('date', date)
+        .eq('profile_id', profileId);
+
+      if (error) throw error;
+    } catch (e) {
+      console.error('同步删除每日完成记录失败:', e);
+      offlineQueue.push({
+        type: 'delete',
+        table: 'daily_completions',
+        data: { task_id: taskId, date, profile_id: profileId },
+      });
+      persistOfflineQueue(offlineQueue);
+    }
+  }
+
   // ── 下行同步 ──
 
   /** 分页拉取远端任务，支持增量（仅拉取 lastSyncAt 之后）和强制全量两种模式 */
@@ -220,9 +257,32 @@ export function useSync() {
     }
   }
 
+  /** 拉取指定日期的远端每日完成记录 ID 列表 */
+  async function pullDailyCompletions(date: string): Promise<string[]> {
+    const profileId = getProfileId();
+    if (!profileId || !isOnline.value) return [];
+
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('daily_completions')
+        .select('task_id')
+        .eq('profile_id', profileId)
+        .eq('date', date);
+      if (error) throw error;
+      return (data || []).map((row) => row.task_id as string);
+    } catch (e) {
+      console.error('拉取每日完成记录失败:', e);
+      return [];
+    }
+  }
+
   async function subscribeToChanges(
     onTaskChange: (task: Task) => void,
-    onDailyCompletionChange: (dc: DailyCompletion) => void,
+    onDailyCompletionChange: (
+      dc: DailyCompletion,
+      eventType: 'INSERT' | 'UPDATE' | 'DELETE',
+    ) => void,
   ): Promise<RealtimeChannel | null> {
     const profileId = getProfileId();
     if (!profileId) return null;
@@ -248,8 +308,9 @@ export function useSync() {
           filter: `profile_id=eq.${profileId}`,
         },
         (payload) => {
-          const dc = payload.new as DailyCompletion;
-          if (dc) onDailyCompletionChange(dc);
+          // DELETE 事件 payload.new 为 null，需回退到 payload.old
+          const dc = (payload.new ?? payload.old) as DailyCompletion | null;
+          if (dc) onDailyCompletionChange(dc, payload.eventType);
         },
       )
       .subscribe((status) => {
@@ -282,7 +343,11 @@ export function useSync() {
 
     for (const item of queue) {
       try {
-        await supabase.from(item.table).upsert(item.data);
+        if (item.type === 'delete') {
+          await supabase.from(item.table).delete().match(item.data);
+        } else {
+          await supabase.from(item.table).upsert(item.data);
+        }
       } catch (e) {
         offlineQueue.push(item);
         persistOfflineQueue(offlineQueue);
@@ -302,6 +367,8 @@ export function useSync() {
     setProfileId,
     pushTask,
     pushDailyCompletion,
+    removeDailyCompletion,
+    pullDailyCompletions,
     pullTasks,
     subscribeToChanges,
     flushOfflineQueue,

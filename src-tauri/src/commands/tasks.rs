@@ -56,6 +56,26 @@ pub fn toggle_task(state: tauri::State<AppState>, id: String) -> Result<(), Stri
     store::save_data(&data)
 }
 
+/// 显式设置任务完成状态（每日任务跨设备同步时使用，避免 toggle 翻转语义歧义）
+#[tauri::command]
+pub fn set_task_completed(
+    state: tauri::State<AppState>,
+    id: String,
+    completed: bool,
+) -> Result<(), String> {
+    let mut data = state.data.lock().unwrap();
+    if let Some(task) = data.tasks.iter_mut().find(|t| t.id == id) {
+        task.completed = completed;
+        task.completed_at = if completed {
+            Some(chrono::Utc::now().to_rfc3339())
+        } else {
+            None
+        };
+        task.updated_at = chrono::Utc::now().to_rfc3339();
+    }
+    store::save_data(&data)
+}
+
 /// 切换每日任务的完成状态（按日期记录）
 #[tauri::command]
 pub fn toggle_daily_task(
@@ -74,6 +94,38 @@ pub fn toggle_daily_task(
         data.daily_completions
             .push(store::DailyCompletion { task_id: id, date });
     }
+    store::save_data(&data)
+}
+
+/// 添加每日任务的完成记录（远端同步时使用）
+#[tauri::command]
+pub fn add_daily_completion(
+    state: tauri::State<AppState>,
+    id: String,
+    date: String,
+) -> Result<(), String> {
+    let mut data = state.data.lock().unwrap();
+    if !data
+        .daily_completions
+        .iter()
+        .any(|dc| dc.task_id == id && dc.date == date)
+    {
+        data.daily_completions
+            .push(store::DailyCompletion { task_id: id, date });
+    }
+    store::save_data(&data)
+}
+
+/// 移除每日任务的完成记录（远端同步时使用）
+#[tauri::command]
+pub fn remove_daily_completion(
+    state: tauri::State<AppState>,
+    id: String,
+    date: String,
+) -> Result<(), String> {
+    let mut data = state.data.lock().unwrap();
+    data.daily_completions
+        .retain(|dc| dc.task_id != id || dc.date != date);
     store::save_data(&data)
 }
 

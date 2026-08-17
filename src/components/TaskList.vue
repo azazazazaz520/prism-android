@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { formatDueDate, todayStr } from '../utils/date';
 
-defineProps<{
+const props = defineProps<{
   tasks: import('../types').Task[];
   dailyCompletionsMap: Record<string, boolean>;
 }>();
@@ -14,6 +14,11 @@ const emit = defineEmits<{
   delete: [id: string];
   'update-meta': [id: string, tags: string[], important: boolean, pinned: boolean];
 }>();
+
+/** 有效完成状态：每日任务按当日完成记录判断，其余按 task.completed 判断 */
+function isCompleted(task: import('../types').Task): boolean {
+  return task.is_daily ? !!props.dailyCompletionsMap[task.id] : task.completed;
+}
 
 const editingId = ref<string | null>(null);
 const editTitle = ref('');
@@ -150,7 +155,7 @@ function resetSwipe(taskId: string) {
 
         <div
           class="task-card"
-          :class="{ completed: task.completed, important: task.important }"
+          :class="{ completed: isCompleted(task), important: task.important }"
           :style="{ transform: `translateX(${swipeState[task.id] || 0}px)` }"
           @touchstart.passive="onTouchStart(task.id, $event)"
           @touchmove="onTouchMove(task.id, $event)"
