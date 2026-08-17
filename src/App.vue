@@ -144,7 +144,7 @@ function syncLabel(): string {
   justify-content: space-between;
   min-height: 64px;
   padding: 12px 20px;
-  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding-top: calc(12px + max(env(safe-area-inset-top, 0px), var(--native-statusbar-inset, 0px)));
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-primary);
