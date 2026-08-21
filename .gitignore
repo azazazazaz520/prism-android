@@ -136,3 +136,8 @@ rustc-ice-*.txt
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# 指定的工作文档随仓库跟踪（其余 docs/ 内容仍忽略）
+!docs/
+docs/*
+!docs/ui-improvement-plan.md
