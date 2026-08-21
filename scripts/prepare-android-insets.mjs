@@ -22,75 +22,89 @@ if (!fs.existsSync(activityPath)) {
   );
 }
 
-let source = fs.readFileSync(activityPath, 'utf8');
-
-if (!source.includes('import android.webkit.WebView')) {
-  source = source.replace(
-    'import android.os.Bundle\n',
-    [
-      'import android.os.Bundle',
-      'import android.webkit.WebView',
-      'import androidx.core.view.ViewCompat',
-      'import androidx.core.view.WindowInsetsCompat',
-      '',
-    ].join('\n'),
-  );
-}
-
 /**
- * 状态栏（顶部）+ 键盘（底部）insets 监听器代码块。
+ * 状态栏（顶部）+ 导航栏（底部）+ 键盘（IME）insets 桥接。
  * Tauri 2 Android WebView 不向 CSS 提供 env(safe-area-inset-*)（见 tauri#14240），
- * 这里通过原生 insets 注入 --native-statusbar-inset / --native-keyboard-inset 两个 CSS 变量。
+ * 这里通过原生 insets 注入 --native-statusbar-inset / --native-navbar-inset /
+ * --native-keyboard-inset 三个 CSS 变量：
+ * - 原生监听器在 insets 变化时推送（键盘弹出、旋转等运行时变化）；
+ * - 前端在页面加载后调用 PrismSystemBars.getInsets() 主动拉取，兜底"insets 事件先于
+ *   页面加载"的首次打开场景，避免状态栏与顶栏文字重叠。
  */
-const INSETS_LISTENER = [
+
+const MAIN_ACTIVITY_SOURCE = [
+  'package com.prism.android',
+  '',
+  'import android.os.Bundle',
+  'import android.webkit.JavascriptInterface',
+  'import android.webkit.WebView',
+  'import androidx.activity.enableEdgeToEdge',
+  'import androidx.core.view.ViewCompat',
+  'import androidx.core.view.WindowCompat',
+  'import androidx.core.view.WindowInsetsCompat',
+  '',
+  '/**',
+  ' * 主 Activity。',
+  ' * Tauri 2 Android WebView 不向 CSS 提供 env(safe-area-inset-*)（见 tauri#14240），',
+  ' * 因此通过原生 insets 监听器推送 --native-statusbar-inset / --native-navbar-inset /',
+  ' * --native-keyboard-inset 三个 CSS 变量；前端在页面加载后还会通过 getInsets() 主动拉取，',
+  ' * 避免首次打开时 insets 事件先于页面加载、导致状态栏与顶栏文字重叠。',
+  ' */',
+  'class MainActivity : TauriActivity() {',
+  '  // 最新 insets（CSS px），由 insets 监听器维护，供前端 getInsets() 拉取',
+  '  private var statusBarInsetCss: Float = 0f',
+  '  private var navBarInsetCss: Float = 0f',
+  '  private var imeInsetCss: Float = 0f',
+  '',
+  '  override fun onCreate(savedInstanceState: Bundle?) {',
+  '    enableEdgeToEdge()',
+  '    super.onCreate(savedInstanceState)',
+  '  }',
+  '',
+  '  override fun onWebViewCreate(webView: WebView) {',
+  '    super.onWebViewCreate(webView)',
+  '    webView.addJavascriptInterface(PrismSystemBars(this), "PrismSystemBars")',
   '    ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->',
   '      val density = resources.displayMetrics.density',
-  '      val statusBarInsetPx = insets.getInsets(WindowInsetsCompat.Type.systemBars()).top',
-  '      val statusBarInsetCss = statusBarInsetPx / density',
-  '      val imeInsetPx = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom',
-  '      val imeInsetCss = imeInsetPx / density',
-  '      val script =',
-  "        \"document.documentElement.style.setProperty('--native-statusbar-inset', '${statusBarInsetCss}px');\" +",
-  "          \"document.documentElement.style.setProperty('--native-keyboard-inset', '${imeInsetCss}px');\" +",
-  '          "window.dispatchEvent(new Event(\'resize\'));"',
-  '      webView.evaluateJavascript(script, null)',
+  '      val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())',
+  '      statusBarInsetCss = systemBars.top / density',
+  '      navBarInsetCss = systemBars.bottom / density',
+  '      imeInsetCss = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density',
+  '      pushInsets(webView)',
   '      insets',
   '    }',
+  '    ViewCompat.requestApplyInsets(webView)',
+  '  }',
+  '',
+  '  /** 将最新 insets 推送到 WebView；页面尚未加载时无副作用，前端加载后经 getInsets() 兜底 */',
+  '  private fun pushInsets(webView: WebView) {',
+  '    val script =',
+  "      \"document.documentElement.style.setProperty('--native-statusbar-inset', '${statusBarInsetCss}px');\" +",
+  "        \"document.documentElement.style.setProperty('--native-navbar-inset', '${navBarInsetCss}px');\" +",
+  "        \"document.documentElement.style.setProperty('--native-keyboard-inset', '${imeInsetCss}px');\" +",
+  '        "window.dispatchEvent(new Event(\'resize\'));"',
+  '    webView.evaluateJavascript(script, null)',
+  '  }',
+  '',
+  '  private class PrismSystemBars(private val activity: MainActivity) {',
+  '    @JavascriptInterface',
+  '    fun setTheme(theme: String) {',
+  '      activity.runOnUiThread {',
+  '        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)',
+  '        val lightBars = theme != "dark"',
+  '        controller.isAppearanceLightStatusBars = lightBars',
+  '        controller.isAppearanceLightNavigationBars = lightBars',
+  '      }',
+  '    }',
+  '',
+  '    /** 前端页面加载后主动拉取 insets，避免首帧漏掉状态栏高度 */',
+  '    @JavascriptInterface',
+  '    fun getInsets(): String {',
+  '      return "{\\"statusBar\\":${activity.statusBarInsetCss},\\"navBar\\":${activity.navBarInsetCss},\\"ime\\":${activity.imeInsetCss}}"',
+  '    }',
+  '  }',
+  '}',
 ].join('\n');
 
-const LISTENER_START = '    ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->';
-const REQUEST_INSETS = '    ViewCompat.requestApplyInsets(webView)';
-
-if (source.includes(LISTENER_START)) {
-  // 已注入过：整体替换监听器块（兼容旧版本只处理键盘 insets 的情况）
-  const start = source.indexOf(LISTENER_START);
-  const end = source.indexOf(REQUEST_INSETS, start);
-  if (end === -1) {
-    throw new Error(
-      'Unexpected MainActivity.kt: insets listener exists without requestApplyInsets',
-    );
-  }
-  source = `${source.slice(0, start)}${INSETS_LISTENER}\n${source.slice(end)}`;
-  console.log('Upgraded Android insets listener (status bar + keyboard)');
-} else if (source.includes(REQUEST_INSETS)) {
-  source = source.replace(REQUEST_INSETS, `${INSETS_LISTENER}\n${REQUEST_INSETS}`);
-  console.log('Added Android insets listener (status bar + keyboard)');
-} else if (!source.includes('override fun onWebViewCreate')) {
-  const method = [
-    '',
-    '  override fun onWebViewCreate(webView: WebView) {',
-    '    super.onWebViewCreate(webView)',
-    INSETS_LISTENER,
-    '    ViewCompat.requestApplyInsets(webView)',
-    '  }',
-  ].join('\n');
-  source = `${source.trimEnd().replace(/}\s*$/, '')}${method}\n}\n`;
-  console.log('Prepared Android insets bridge (status bar + keyboard)');
-} else {
-  throw new Error(
-    'Unexpected MainActivity.kt: onWebViewCreate exists but no insets listener found',
-  );
-}
-
-fs.writeFileSync(activityPath, source);
-console.log(`Prepared Android insets bridge: ${activityPath}`);
+fs.writeFileSync(activityPath, MAIN_ACTIVITY_SOURCE + '\n');
+console.log(`Prepared Android insets bridge (status bar + nav bar + keyboard): ${activityPath}`);

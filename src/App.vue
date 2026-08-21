@@ -4,8 +4,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from './composables/useAuth';
 import { useKeyboardViewport } from './composables/useKeyboardViewport';
 import { useTaskStore } from './composables/useTaskStore';
-import { lastSyncAt, syncStatus } from './composables/useSync';
+import { lastSyncAt, offlineQueueCount, syncStatus } from './composables/useSync';
 import { useTheme } from './composables/useTheme';
+import { useSystemInsets } from './composables/useSystemInsets';
 
 const isTauri = !!(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
 
@@ -16,6 +17,7 @@ const { load: loadTheme } = useTheme();
 const { initAuth } = useAuth();
 
 useKeyboardViewport();
+useSystemInsets();
 
 onMounted(async () => {
   await initAuth();
@@ -48,11 +50,30 @@ function syncLabel(): string {
     case 'syncing':
       return '正在同步';
     case 'offline':
-      return '离线，已保存到本地';
+      return offlineQueueCount.value
+        ? `离线 · ${offlineQueueCount.value} 项待同步`
+        : '离线，已保存到本地';
     case 'error':
-      return '同步失败，点击重试';
+      return offlineQueueCount.value
+        ? `同步失败 · ${offlineQueueCount.value} 项待同步`
+        : '同步失败，点击重试';
     case 'unauthorized':
       return '同步未授权';
+    default:
+      return lastSyncAt.value ? '已同步' : '同步';
+  }
+}
+
+function syncShortLabel(): string {
+  switch (syncStatus.value) {
+    case 'syncing':
+      return '同步中';
+    case 'offline':
+      return '离线';
+    case 'error':
+      return '重试';
+    case 'unauthorized':
+      return '未授权';
     default:
       return lastSyncAt.value ? '已同步' : '同步';
   }
@@ -67,25 +88,22 @@ function syncLabel(): string {
         <span class="brand-name">Prism</span>
       </div>
 
-      <div class="top-actions">
-        <span class="sync-state" :class="syncStatus">
-          <span class="sync-dot" aria-hidden="true"></span>
-          {{ syncLabel() }}
-        </span>
-        <button
-          class="sync-btn"
-          :class="{ syncing: syncStatus === 'syncing', error: syncStatus === 'error' }"
-          :aria-label="syncLabel()"
-          :title="syncLabel()"
-          @click="refreshTasks()"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <polyline points="23 4 23 10 17 10" />
-            <polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
-        </button>
-      </div>
+      <button
+        class="sync-control"
+        :class="[syncStatus, { syncing: syncStatus === 'syncing', error: syncStatus === 'error' }]"
+        :aria-label="syncLabel()"
+        :title="syncLabel()"
+        @click="refreshTasks()"
+      >
+        <span class="sync-dot" aria-hidden="true"></span>
+        <span class="sync-label sync-label-short">{{ syncShortLabel() }}</span>
+        <span class="sync-label sync-label-long">{{ syncLabel() }}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10" />
+          <polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+        </svg>
+      </button>
     </header>
 
     <main class="main-body">
@@ -152,8 +170,7 @@ function syncLabel(): string {
 }
 
 .brand,
-.top-actions,
-.sync-state {
+.sync-control {
   display: flex;
   align-items: center;
 }
@@ -182,21 +199,6 @@ function syncLabel(): string {
   letter-spacing: -0.01em;
 }
 
-.top-actions {
-  gap: 8px;
-  min-width: 0;
-}
-
-.sync-state {
-  gap: 6px;
-  max-width: 180px;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .sync-dot {
   width: 7px;
   height: 7px;
@@ -205,43 +207,44 @@ function syncLabel(): string {
   background: var(--success);
 }
 
-.sync-state.syncing .sync-dot {
+.sync-control.syncing .sync-dot {
   background: var(--accent);
   animation: sync-pulse 1s ease-in-out infinite;
 }
 
-.sync-state.error .sync-dot,
-.sync-state.offline .sync-dot,
-.sync-state.unauthorized .sync-dot {
+.sync-control.error .sync-dot,
+.sync-control.offline .sync-dot,
+.sync-control.unauthorized .sync-dot {
   background: var(--danger);
 }
 
-.sync-state.syncing {
+.sync-control.syncing {
   color: var(--accent);
 }
 
-.sync-state.error,
-.sync-state.offline,
-.sync-state.unauthorized {
+.sync-control.error,
+.sync-control.offline,
+.sync-control.unauthorized {
   color: var(--danger);
 }
 
-.sync-btn {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+.sync-control {
+  gap: 7px;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
-  background: transparent;
+  background: var(--bg-primary);
   cursor: pointer;
   transition:
     color var(--transition-fast),
-    background var(--transition-fast);
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
-.sync-btn svg {
+.sync-control svg {
   width: 20px;
   height: 20px;
   fill: none;
@@ -251,18 +254,31 @@ function syncLabel(): string {
   stroke-width: 1.6;
 }
 
-.sync-btn.syncing svg {
+.sync-control.syncing svg {
   animation: sync-rotate 1s linear infinite;
 }
 
-.sync-btn.error {
+.sync-control.error {
   color: var(--danger);
+  border-color: var(--danger-light);
+  background: var(--danger-light);
 }
 
-.sync-btn:active,
-.sync-btn:focus-visible {
+.sync-control:active,
+.sync-control:focus-visible {
   color: var(--accent);
+  border-color: var(--accent-muted);
   background: var(--accent-light);
+}
+
+.sync-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.sync-label-short {
+  display: none;
 }
 
 .main-body {
@@ -278,7 +294,7 @@ function syncLabel(): string {
   display: flex;
   border-top: 1px solid var(--border-light);
   background: var(--bg-primary);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--native-navbar-inset, 0px));
   flex-shrink: 0;
 }
 
@@ -350,8 +366,17 @@ function syncLabel(): string {
     padding-left: 12px;
   }
 
-  .sync-state {
-    max-width: 132px;
+  .sync-control {
+    gap: 6px;
+    padding: 0 9px;
+  }
+
+  .sync-label-long {
+    display: none;
+  }
+
+  .sync-label-short {
+    display: inline;
   }
 }
 

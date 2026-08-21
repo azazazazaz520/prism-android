@@ -188,8 +188,8 @@ onUnmounted(() => {
 
       <header class="composer-header">
         <div>
-          <p class="composer-eyebrow">新建任务</p>
-          <h2 id="composer-title">把下一步写下来</h2>
+          <p class="composer-eyebrow">新增</p>
+          <h2 id="composer-title">快速记下一件事</h2>
         </div>
         <button class="close-button" type="button" aria-label="关闭新增任务" @click="closeSheet">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -205,6 +205,9 @@ onUnmounted(() => {
           ref="titleInput"
           v-model="title"
           class="title-input"
+          type="text"
+          inputmode="text"
+          enterkeyhint="done"
           @focus="handleTitleFocus"
           placeholder="例如：整理本周项目计划"
           maxlength="200"
@@ -364,7 +367,7 @@ onUnmounted(() => {
   max-height: calc(100% - var(--space-xl));
   margin: 0 auto;
   padding: var(--space-sm) max(var(--space-xl), env(safe-area-inset-right, 0px))
-    calc(var(--space-xl) + env(safe-area-inset-bottom, 0px))
+    calc(var(--space-xl) + max(env(safe-area-inset-bottom, 0px), var(--native-navbar-inset, 0px)))
     max(var(--space-xl), env(safe-area-inset-left, 0px));
   overflow-y: auto;
   scroll-padding-top: var(--space-xl);
@@ -713,6 +716,12 @@ onUnmounted(() => {
 
 .composer-actions {
   margin-top: var(--space-sm);
+  position: sticky;
+  bottom: calc(-1 * max(env(safe-area-inset-bottom, 0px), var(--native-navbar-inset, 0px)));
+  z-index: 1;
+  padding-top: var(--space-sm);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--native-navbar-inset, 0px));
+  background: var(--bg-primary);
 }
 
 .cancel-button,

@@ -8,7 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:android": "node scripts/dev-host.mjs && node scripts/prepare-android-insets.mjs && tauri android dev",
+    "tauri:android": "node scripts/prepare-android-insets.mjs && node scripts/dev-host.mjs",
     "tauri:android:debug": "node scripts/prepare-android-insets.mjs && tauri android build --debug --target aarch64 --apk",
     "android:signing:create": "node scripts/create-android-signing.mjs && node scripts/prepare-android-signing.mjs --required",
     "android:signing:check": "node scripts/prepare-android-signing.mjs",
