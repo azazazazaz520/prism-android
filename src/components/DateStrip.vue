@@ -12,144 +12,153 @@ const emit = defineEmits<{
   'select-date': [date: string | null];
 }>();
 
-/** 生成最近 7 天的日期列表 */
-const dates = computed(() => {
-  const result: { date: string; label: string; dayName: string }[] = [];
-  const now = new Date();
-  const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${y}-${m}-${day}`;
-    const today = todayStr();
-    result.push({
-      date: dateStr,
-      label: dateStr === today ? '今天' : `${m}/${day}`,
-      dayName: dayNames[d.getDay()],
-    });
-  }
-  return result;
-});
+const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
 
-function hasTasks(date: string): boolean {
-  return props.tasks.some((task) => !task.is_deleted && (task.due_date === date || task.is_daily));
+function parseDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
-function handleSelect(date: string) {
-  if (props.selectedDate === date) {
-    emit('select-date', null);
-  } else {
-    emit('select-date', date);
-  }
+function dateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+const today = todayStr();
+
+const days = computed(() => {
+  const base = parseDate(props.selectedDate ?? today);
+  const mondayOffset = (base.getDay() + 6) % 7;
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - mondayOffset);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    const key = dateKey(date);
+    const count = props.tasks.filter((task) => !task.is_deleted && task.due_date === key).length;
+
+    return {
+      date: key,
+      weekday: weekdayNames[date.getDay()],
+      day: date.getDate(),
+      month: date.getMonth() + 1,
+      today: key === today,
+      count,
+    };
+  });
+});
+
+function selectDay(date: string) {
+  emit('select-date', props.selectedDate === date ? null : date);
+}
+
+function ariaLabel(day: (typeof days.value)[number]): string {
+  const suffix = day.count ? `，${day.count} 项任务` : '';
+  return `${day.month}月${day.day}日 星期${day.weekday}${suffix}`;
 }
 </script>
 
 <template>
-  <div class="date-strip">
+  <div class="week" role="group" aria-label="按日期筛选">
     <button
-      v-for="d in dates"
-      :key="d.date"
-      class="date-chip"
-      :class="{ active: selectedDate === d.date, today: d.label === '今天' }"
-      @click="handleSelect(d.date)"
+      v-for="day in days"
+      :key="day.date"
+      type="button"
+      class="day"
+      :class="{ active: selectedDate === day.date, today: day.today }"
+      :aria-pressed="selectedDate === day.date"
+      :aria-label="ariaLabel(day)"
+      @click="selectDay(day.date)"
     >
-      <span class="day-name">{{ d.dayName }}</span>
-      <span class="day-label">{{ d.label }}</span>
-      <span v-if="hasTasks(d.date)" class="date-dot" aria-hidden="true"></span>
+      <span class="wd">{{ day.weekday }}</span>
+      <span class="num">{{ day.day }}</span>
+      <span class="dot" :class="{ show: day.count > 0 }" aria-hidden="true"></span>
     </button>
   </div>
 </template>
 
 <style scoped>
-.date-strip {
-  display: flex;
-  gap: 7px;
-  min-width: 0;
-  padding: 12px 0 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.date-strip::-webkit-scrollbar {
-  display: none;
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 2px 8px 0;
 }
 
-.date-chip {
+.day {
   display: flex;
+  min-height: 56px;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 56px;
-  min-height: 60px;
-  padding: 7px 8px 6px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
+  gap: 4px;
+  padding: 6px 0 5px;
+  border-radius: 12px;
+  color: var(--label-2);
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
 }
 
-.date-chip:active {
-  transform: scale(0.95);
+.day:active {
+  background: var(--fill-3);
 }
 
-.date-chip.active {
-  background: var(--accent-light);
-  border-color: var(--accent);
-  color: var(--accent);
+.wd {
+  font-size: var(--f-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
 
-.date-chip.today:not(.active) {
-  border-color: var(--accent-muted);
-}
-
-.day-name {
-  font-size: var(--text-sm);
-  opacity: 0.7;
-}
-
-.day-label {
-  font-size: var(--text-base);
-  font-weight: var(--font-weight-semibold);
-}
-
-.date-dot {
-  width: 5px;
-  height: 5px;
-  margin-top: 2px;
+.num {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
   border-radius: 50%;
-  background: var(--accent);
+  color: var(--label);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
 }
 
-.date-chip.active .date-dot {
-  background: currentColor;
+.today .num {
+  color: var(--tint);
+  font-weight: 600;
 }
 
-@media (max-width: 560px) {
-  .date-strip {
-    gap: 6px;
-    padding: 10px 0 12px;
-  }
+.today .wd {
+  color: var(--tint);
+}
 
-  .date-chip {
-    min-width: 54px;
-    min-height: 58px;
-    padding: 6px 8px;
-    border-radius: var(--radius-md);
-  }
+.active .num {
+  color: var(--on-tint);
+  background: var(--tint-fill);
+  font-weight: 600;
+}
 
-  .day-name {
-    font-size: 12px;
-  }
+.active .wd {
+  color: var(--tint);
+}
 
-  .day-label {
-    font-size: 14px;
-  }
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--tint);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.dot.show {
+  opacity: 1;
+}
+
+.active .dot {
+  opacity: 0;
 }
 </style>
