@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════
+   iOS 列表与控件原语
+   跨组件复用的分组列表、行、分隔线、图标按钮
+   ═══════════════════════════════════════════ */
+
+/* ── 分组 ─────────────────────────────── */
+.ios-group {
+  margin: 0 0 22px;
+}
+
+.ios-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 7px;
+  color: var(--label-2);
+  font-size: var(--f-footnote);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.ios-count {
+  color: var(--label-3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.ios-group-foot {
+  margin: 7px 4px 0;
+  color: var(--label-2);
+  font-size: var(--f-footnote);
+  line-height: 1.45;
+}
+
+/* ── 卡片与行 ─────────────────────────── */
+.ios-card {
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--bg-elevated);
+}
+
+.ios-row {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  color: var(--label);
+  background: transparent;
+  font-size: var(--f-body);
+  letter-spacing: -0.01em;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.ios-row.tall {
+  min-height: var(--row-h-2);
+}
+
+.ios-row:active {
+  background: var(--fill-3);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ios-row:hover {
+    background: var(--fill-3);
+  }
+}
+
+.ios-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ios-value {
+  margin-left: auto;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ios-sep {
+  height: 0.5px;
+  margin-left: 16px;
+  background: var(--sep);
+}
+
+.ios-sep.inset {
+  margin-left: 52px;
+}
+
+/* ── 图标 ─────────────────────────────── */
+.ios-icon {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--tint);
+  background: var(--fill-2);
+}
+
+.ios-icon.warm {
+  color: var(--orange);
+}
+
+.ios-chevron {
+  flex: 0 0 7px;
+  color: var(--label-3);
+}
+
+/* ── 导航栏图标按钮 ───────────────────── */
+.ios-icon-btn {
+  display: grid;
+  width: var(--hit);
+  height: var(--hit);
+  place-items: center;
+  border-radius: 50%;
+  color: var(--tint);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-standard);
+}
+
+.ios-icon-btn:active {
+  background: var(--fill-3);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ios-icon-btn:hover {
+    background: var(--fill-3);
+  }
+}
+
+.ios-icon-btn:disabled {
+  opacity: 0.36;
+}
+
+/* ── 文本动作 ─────────────────────────── */
+.ios-link {
+  color: var(--tint);
+  font-size: var(--f-body);
+  letter-spacing: -0.01em;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.ios-link:active {
+  opacity: 0.5;
+}
+
+.ios-link.destructive {
+  color: var(--red-text);
+}

@@ -1,13 +1,18 @@
 /* ═══════════════════════════════════════════
-   Design Tokens — CSS Custom Properties
-   暗色模式默认值（移动端暗色优先），亮色模式覆写 [data-theme="light"]
+   Design Tokens — iOS 语义令牌
+   默认浅色；[data-theme='dark'] 覆写；auto 跟随系统
+   旧变量名保留为别名，P1 重构完成后删除
    ═══════════════════════════════════════════ */
 
 :root {
+  color-scheme: light;
+
   /* ── 字体 ──────────────────────────── */
-  --font-sans:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
-    sans-serif;
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
+    'Noto Sans CJK SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  --font-sans: var(--font-ui);
 
   /* 字重 */
   --font-weight-normal: 400;
@@ -15,175 +20,242 @@
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  /* 字号层级 */
-  --text-h1: 20px;
-  --text-h2: 16px;
-  --text-base: 16px;
-  --text-sm: 13px;
-  --text-xs: 12px;
+  /* 字号阶梯（iOS） */
+  --f-large-title: 34px;
+  --f-title-2: 22px;
+  --f-title-3: 20px;
+  --f-headline: 17px;
+  --f-body: 17px;
+  --f-subhead: 15px;
+  --f-footnote: 13px;
+  --f-caption: 11px;
 
-  /* ── 背景（暗色模式默认） ──────────── */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #253344;
-  --bg-hover: #1e2d3e;
-  --bg-active: #334455;
+  /* 旧字号别名 */
+  --text-h1: var(--f-large-title);
+  --text-h2: var(--f-title-3);
+  --text-base: var(--f-body);
+  --text-sm: var(--f-subhead);
+  --text-xs: var(--f-footnote);
 
-  /* ── 文字（暗色模式默认） ──────────── */
-  --text-primary: #d4e4e0;
-  --text-secondary: #9ab5ae;
-  --text-muted: #5e7e76;
-  --text-disabled: #48605a;
+  /* ── 颜色：浅色 ────────────────────── */
+  --bg: #f2f2f7;
+  --bg-elevated: #ffffff;
+  --label: #000000;
+  --label-2: rgba(60, 60, 67, 0.75);
+  --label-3: rgba(60, 60, 67, 0.42);
+  --label-4: rgba(60, 60, 67, 0.18);
+  --sep: rgba(60, 60, 67, 0.29);
+  --sep-opaque: #c6c6c8;
+  --fill-1: rgba(120, 120, 128, 0.2);
+  --fill-2: rgba(120, 120, 128, 0.14);
+  --fill-3: rgba(118, 118, 128, 0.09);
 
-  /* ── 边框 ──────────────────────────── */
-  --border-light: #253344;
-  --border-default: #334455;
-  --border-subtle: #1e2d3e;
+  --tint: #0f766e;
+  --tint-fill: #0e9c8e;
+  --tint-soft: rgba(15, 118, 110, 0.1);
+  --tint-border: rgba(15, 118, 110, 0.22);
+  --on-tint: #ffffff;
 
-  /* ── 强调色 (Teal) ─────────────────── */
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
-  --accent-light: rgba(13, 148, 136, 0.08);
-  --accent-muted: rgba(13, 148, 136, 0.18);
-  --accent-bg: rgba(13, 148, 136, 0.1);
-  --accent-bg-active: rgba(13, 148, 136, 0.2);
+  --bar: rgba(249, 249, 249, 0.86);
+  --bar-opaque: #f9f9f9;
+  --seg-thumb: #ffffff;
 
-  /* ── 状态色 ────────────────────────── */
-  --danger: #ef4444;
-  --danger-light: rgba(239, 68, 68, 0.12);
-  --warning: #f59e0b;
-  --warning-light: rgba(245, 158, 11, 0.12);
-  --success: #10b981;
+  --green: #34c759;
+  --orange: #d97706;
+  --orange-soft: rgba(217, 119, 6, 0.12);
+  --red: #ff3b30;
+  --red-text: #d70015;
+  --red-soft: rgba(255, 59, 48, 0.12);
 
-  /* ── 灰度阶梯 ──────────────────────── */
-  --gray-100: #1a2332;
-  --gray-200: #253344;
-  --gray-300: #334455;
-  --gray-400: #48605a;
-  --gray-500: #5e7e76;
-  --gray-600: #7a9990;
-  --gray-700: #9ab5ae;
-  --gray-800: #b4ccc6;
-  --gray-900: #d4e4e0;
+  /* ── 旧颜色别名（P1 完成后删除） ────── */
+  --accent: var(--tint);
+  --accent-hover: var(--tint);
+  --accent-light: var(--tint-soft);
+  --accent-muted: var(--tint-border);
+  --accent-bg: var(--tint-soft);
+  --accent-bg-active: rgba(15, 118, 110, 0.16);
+  --danger: var(--red);
+  --danger-light: var(--red-soft);
+  --warning: var(--orange);
+  --warning-light: var(--orange-soft);
+  --success: var(--green);
+  --text-primary: var(--label);
+  --text-secondary: var(--label-2);
+  --text-muted: var(--label-2);
+  --text-disabled: var(--label-3);
+  --bg-primary: var(--bg-elevated);
+  --bg-secondary: var(--bg);
+  --bg-tertiary: var(--fill-2);
+  --bg-hover: var(--fill-3);
+  --bg-active: var(--fill-2);
+  --border-light: var(--sep);
+  --border-default: var(--sep);
+  --border-subtle: var(--sep);
 
-  /* ── 间距（4px 基准） ──────────────── */
+  --gray-100: #f7f7fa;
+  --gray-200: #ececf0;
+  --gray-300: #d1d1d6;
+  --gray-400: #aeaeb2;
+  --gray-500: #8e8e93;
+  --gray-600: #6c6c70;
+  --gray-700: #48484a;
+  --gray-800: #2c2c2e;
+  --gray-900: #1c1c1e;
+
+  /* ── 间距（4pt 基准） ──────────────── */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
   --space-lg: 16px;
   --space-xl: 20px;
   --space-2xl: 24px;
+  --space-3xl: 32px;
+  --page-x: 16px;
 
-  /* ── 圆角（移动端适配） ────────────── */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 28px;
+  /* ── 形状 ──────────────────────────── */
+  --r-control: 8px;
+  --r-row: 10px;
+  --r-card: 12px;
+  --r-sheet: 12px;
+  --r-alert: 14px;
+  --radius-sm: var(--r-control);
+  --radius-md: var(--r-row);
+  --radius-lg: var(--r-card);
+  --radius-xl: var(--r-sheet);
+  --radius-full: 999px;
+
+  /* ── 尺寸 ──────────────────────────── */
+  --nav-h: 44px;
+  --tabbar-h: 49px;
+  --hit: 44px;
+  --row-h: 44px;
+  --row-h-2: 60px;
 
   /* ── 阴影 ──────────────────────────── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 2px 4px -1px rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 8px 12px -3px rgba(0, 0, 0, 0.3), 0 3px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-sheet: 0 -18px 44px rgba(0, 0, 0, 0.2);
+  --shadow-thumb: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: var(--shadow-sm);
+  --shadow-lg: var(--shadow-sheet);
 
-  /* ── 过渡/easing ───────────────────── */
-  --transition-fast: 0.15s;
-  --transition-normal: 0.25s;
-  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* ── 动效 ──────────────────────────── */
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-sheet: 360ms;
+  --transition-fast: var(--dur-fast);
+  --transition-normal: var(--dur-base);
+  --easing-standard: var(--ease-standard);
+  --easing-spring: var(--ease-spring);
 }
 
 /* ═══════════════════════════════════════════
-   亮色模式
+   深色
    ═══════════════════════════════════════════ */
 
-[data-theme='light'] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafa;
-  --bg-tertiary: #f1f5f4;
-  --bg-hover: #f3f7f6;
-  --bg-active: #e2e8e6;
+[data-theme='dark'] {
+  color-scheme: dark;
 
-  --text-primary: #1a2e2b;
-  --text-secondary: #4a5e5a;
-  --text-muted: #647873;
-  --text-disabled: #b0c0bb;
+  --bg: #000000;
+  --bg-elevated: #1c1c1e;
+  --label: #ffffff;
+  --label-2: rgba(235, 235, 245, 0.6);
+  --label-3: rgba(235, 235, 245, 0.32);
+  --label-4: rgba(235, 235, 245, 0.16);
+  --sep: rgba(84, 84, 88, 0.62);
+  --sep-opaque: #38383a;
+  --fill-1: rgba(120, 120, 128, 0.36);
+  --fill-2: rgba(120, 120, 128, 0.24);
+  --fill-3: rgba(118, 118, 128, 0.16);
 
-  --border-light: #dce8e5;
-  --border-default: #d0ddd9;
-  --border-subtle: #e2ece9;
+  --tint: #3fd8c8;
+  --tint-fill: #0e9c8e;
+  --tint-soft: rgba(63, 216, 200, 0.14);
+  --tint-border: rgba(63, 216, 200, 0.28);
+  --on-tint: #ffffff;
 
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
-  --accent-light: #f0fdfa;
-  --accent-muted: rgba(13, 148, 136, 0.15);
-  --accent-bg: #ccfbf1;
-  --accent-bg-active: #99f6e4;
+  --bar: rgba(22, 22, 24, 0.86);
+  --bar-opaque: #161618;
+  --seg-thumb: #636366;
 
-  --danger: #e74c3c;
-  --danger-light: rgba(231, 76, 60, 0.12);
-  --warning: #e67e22;
-  --warning-light: rgba(230, 126, 34, 0.12);
-  --success: #27ae60;
+  --green: #30d158;
+  --orange: #ffb340;
+  --orange-soft: rgba(255, 179, 64, 0.16);
+  --red: #ff453a;
+  --red-text: #ff6961;
+  --red-soft: rgba(255, 69, 58, 0.16);
 
-  --gray-100: #f7f9f8;
-  --gray-200: #edf0ef;
-  --gray-300: #dce2e0;
-  --gray-400: #c4ccc9;
-  --gray-500: #8a9e99;
-  --gray-600: #6b807b;
-  --gray-700: #556b66;
-  --gray-800: #3d524d;
-  --gray-900: #1a2e2b;
+  --accent-bg-active: rgba(63, 216, 200, 0.2);
+  --gray-100: #1c1c1e;
+  --gray-200: #2c2c2e;
+  --gray-300: #3a3a3c;
+  --gray-400: #48484a;
+  --gray-500: #636366;
+  --gray-600: #8e8e93;
+  --gray-700: #aeaeb2;
+  --gray-800: #c7c7cc;
+  --gray-900: #f2f2f7;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 8px 12px -3px rgba(0, 0, 0, 0.08), 0 3px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-sheet: 0 -18px 44px rgba(0, 0, 0, 0.6);
+  --shadow-thumb: 0 3px 8px rgba(0, 0, 0, 0.4), 0 3px 1px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-/* 跟随系统：仅在 data-theme="auto" 时生效 */
-@media (prefers-color-scheme: light) {
+/* 跟随系统 */
+@media (prefers-color-scheme: dark) {
   [data-theme='auto'] {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8fafa;
-    --bg-tertiary: #f1f5f4;
-    --bg-hover: #f3f7f6;
-    --bg-active: #e2e8e6;
+    color-scheme: dark;
 
-    --text-primary: #1a2e2b;
-    --text-secondary: #4a5e5a;
-    --text-muted: #647873;
-    --text-disabled: #b0c0bb;
+    --bg: #000000;
+    --bg-elevated: #1c1c1e;
+    --label: #ffffff;
+    --label-2: rgba(235, 235, 245, 0.6);
+    --label-3: rgba(235, 235, 245, 0.32);
+    --label-4: rgba(235, 235, 245, 0.16);
+    --sep: rgba(84, 84, 88, 0.62);
+    --sep-opaque: #38383a;
+    --fill-1: rgba(120, 120, 128, 0.36);
+    --fill-2: rgba(120, 120, 128, 0.24);
+    --fill-3: rgba(118, 118, 128, 0.16);
 
-    --border-light: #e8f0ee;
-    --border-default: #d0ddd9;
-    --border-subtle: #e2ece9;
+    --tint: #3fd8c8;
+    --tint-fill: #0e9c8e;
+    --tint-soft: rgba(63, 216, 200, 0.14);
+    --tint-border: rgba(63, 216, 200, 0.28);
+    --on-tint: #ffffff;
 
-    --accent: #0d9488;
-    --accent-hover: #0f766e;
-    --accent-light: #f0fdfa;
-    --accent-muted: rgba(13, 148, 136, 0.15);
-    --accent-bg: #ccfbf1;
-    --accent-bg-active: #99f6e4;
+    --bar: rgba(22, 22, 24, 0.86);
+    --bar-opaque: #161618;
+    --seg-thumb: #636366;
 
-    --danger: #e74c3c;
-    --danger-light: rgba(231, 76, 60, 0.12);
-    --warning: #e67e22;
-    --warning-light: rgba(230, 126, 34, 0.12);
-    --success: #27ae60;
+    --green: #30d158;
+    --orange: #ffb340;
+    --orange-soft: rgba(255, 179, 64, 0.16);
+    --red: #ff453a;
+    --red-text: #ff6961;
+    --red-soft: rgba(255, 69, 58, 0.16);
 
-    --gray-100: #f7f9f8;
-    --gray-200: #edf0ef;
-    --gray-300: #dce2e0;
-    --gray-400: #c4ccc9;
-    --gray-500: #8a9e99;
-    --gray-600: #6b807b;
-    --gray-700: #556b66;
-    --gray-800: #3d524d;
-    --gray-900: #1a2e2b;
+    --gray-100: #1c1c1e;
+    --gray-200: #2c2c2e;
+    --gray-300: #3a3a3c;
+    --gray-400: #48484a;
+    --gray-500: #636366;
+    --gray-600: #8e8e93;
+    --gray-700: #aeaeb2;
+    --gray-800: #c7c7cc;
+    --gray-900: #f2f2f7;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-md: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-    --shadow-lg: 0 8px 12px -3px rgba(0, 0, 0, 0.08), 0 3px 4px -2px rgba(0, 0, 0, 0.04);
+    --shadow-sheet: 0 -18px 44px rgba(0, 0, 0, 0.6);
+    --shadow-thumb: 0 3px 8px rgba(0, 0, 0, 0.4), 0 3px 1px rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* 系统字号缩放：根字号随系统设置变化时保持可读 */
+@media (prefers-contrast: more) {
+  :root {
+    --label-2: rgba(60, 60, 67, 0.9);
+    --sep: rgba(60, 60, 67, 0.5);
   }
 }
