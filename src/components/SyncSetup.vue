@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import AppIcon from './AppIcon.vue';
 import { useAuth } from '../composables/useAuth';
 import { useSyncCode } from '../composables/useSyncCode';
 
@@ -101,107 +102,121 @@ async function handleEdit() {
 
 <template>
   <div class="sync-setup">
-    <div v-if="!isLoggedIn" class="sync-state" aria-live="polite">
-      <p v-if="authLoading" class="sync-hint">正在准备安全同步…</p>
-      <p v-else-if="authError" class="error-msg">初始化失败：{{ authError }}</p>
-      <p v-else class="sync-hint">同步服务暂不可用，请稍后重试。</p>
+    <div v-if="!isLoggedIn" class="ios-card">
+      <p class="ios-row status-row" aria-live="polite">
+        {{
+          authLoading
+            ? '正在准备安全同步…'
+            : authError
+              ? `初始化失败：${authError}`
+              : '同步服务暂不可用，请稍后重试。'
+        }}
+      </p>
     </div>
 
     <template v-else>
-      <div v-if="paired" class="sync-configured">
-        <div class="sync-intro">
-          <span class="status-badge"><span class="status-dot"></span>已连接</span>
-          <p>使用同一同步码的设备会共享任务的新增、完成和删除状态。</p>
+      <div v-if="paired" class="ios-card">
+        <div class="ios-row">
+          <span class="ios-icon"><AppIcon name="repeat" :size="17" /></span>
+          <span class="ios-row-main">同步状态</span>
+          <span class="ios-value status-value"
+            ><span class="dot" aria-hidden="true"></span>已连接</span
+          >
         </div>
 
-        <div v-if="isEditing" class="edit-block">
-          <label class="field-label" for="edit-sync-code">更换同步码</label>
-          <div class="edit-row">
+        <div class="ios-sep inset"></div>
+
+        <div class="ios-row">
+          <span class="ios-icon"><AppIcon name="copy" :size="17" /></span>
+          <span class="ios-row-main">同步码</span>
+          <code class="code">{{ syncCode }}</code>
+          <button class="ios-link copy" type="button" @click="copySyncCode">
+            {{ copyState === 'copied' ? '已复制' : '复制' }}
+          </button>
+        </div>
+
+        <div class="ios-sep inset"></div>
+
+        <button class="ios-row tint-row" type="button" @click="startEdit">
+          <span class="ios-icon"><AppIcon name="plus" :size="17" /></span>
+          <span class="ios-row-main">更换同步码</span>
+          <AppIcon class="ios-chevron" name="chevron" :size="13" />
+        </button>
+
+        <div v-if="isEditing" class="panel">
+          <label class="panel-label" for="edit-sync-code">新同步码</label>
+          <div class="panel-row">
             <input
               id="edit-sync-code"
               v-model="editCode"
-              class="text-input"
+              class="panel-input"
               type="text"
               inputmode="text"
               autocomplete="off"
               placeholder="输入新的同步码"
               @keyup.enter="handleEdit"
             />
-            <button class="btn btn-primary" type="button" :disabled="isPairing" @click="handleEdit">
+            <button class="ios-link" type="button" :disabled="isPairing" @click="handleEdit">
               保存
             </button>
-            <button class="btn btn-outline" type="button" :disabled="isPairing" @click="cancelEdit">
+            <button class="ios-link muted" type="button" :disabled="isPairing" @click="cancelEdit">
               取消
             </button>
           </div>
         </div>
 
-        <div v-else class="code-card">
-          <div class="code-heading">
-            <span class="field-label">同步码</span>
-            <button class="text-action" type="button" @click="startEdit">更换</button>
-          </div>
-          <code>{{ syncCode }}</code>
-          <button class="copy-button" type="button" @click="copySyncCode">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="9" y="9" width="11" height="11" rx="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-            <span>{{ copyState === 'copied' ? '已复制' : '复制同步码' }}</span>
-          </button>
-        </div>
-
-        <p class="sync-hint">
-          在其他设备上输入此同步码即可加入。同步码只保存在你的设备上，请妥善保管。
-        </p>
-        <p v-if="copyState === 'error'" class="copy-hint" aria-live="polite">
+        <p v-if="copyState === 'error'" class="ios-row error-row" aria-live="polite">
           复制失败，请长按同步码手动复制。
         </p>
-        <p v-if="localError" class="error-msg" role="alert">{{ localError }}</p>
+        <p v-if="localError" class="ios-row error-row" role="alert">{{ localError }}</p>
       </div>
 
-      <div v-else class="sync-unconfigured">
-        <p class="sync-hint">先在一台设备生成同步码，再在其他设备输入同一代码完成配对。</p>
-
+      <div v-else class="ios-card">
         <button
-          class="btn btn-primary primary-action"
+          class="ios-row tint-row"
           type="button"
           :disabled="isPairing"
           @click="handleGenerate"
         >
-          <span v-if="isPairing" class="spinner"></span>
-          <span>{{ isPairing ? '正在连接…' : '生成同步码' }}</span>
+          <span class="ios-icon"><AppIcon name="plus" :size="17" /></span>
+          <span class="ios-row-main">{{ isPairing ? '正在连接…' : '生成同步码' }}</span>
         </button>
 
-        <div class="divider"><span>已有同步码</span></div>
+        <div class="ios-sep inset"></div>
 
-        <div class="input-block">
-          <label class="field-label" for="join-sync-code">输入已有同步码</label>
-          <div class="input-row">
-            <input
-              id="join-sync-code"
-              v-model="inputCode"
-              class="text-input"
-              type="text"
-              inputmode="text"
-              autocomplete="off"
-              placeholder="粘贴同步码"
-              @keyup.enter="handleJoin"
-            />
-            <button
-              class="btn btn-outline"
-              type="button"
-              :disabled="!inputCode.trim() || isPairing"
-              @click="handleJoin"
-            >
-              配对
-            </button>
-          </div>
+        <div class="ios-row">
+          <span class="ios-icon"><AppIcon name="copy" :size="17" /></span>
+          <input
+            v-model="inputCode"
+            class="join-input"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="输入已有同步码"
+            aria-label="已有同步码"
+            @keyup.enter="handleJoin"
+          />
+          <button
+            class="ios-link"
+            type="button"
+            :disabled="!inputCode.trim() || isPairing"
+            @click="handleJoin"
+          >
+            配对
+          </button>
         </div>
 
-        <p v-if="localError" class="error-msg" role="alert">{{ localError }}</p>
+        <p v-if="localError" class="ios-row error-row" role="alert">{{ localError }}</p>
       </div>
     </template>
+
+    <p v-if="isLoggedIn" class="ios-group-foot">
+      {{
+        paired
+          ? '同一同步码的设备共享任务的新增、完成与删除。'
+          : '先在一台设备生成同步码，再在其他设备输入同一代码完成配对。'
+      }}
+    </p>
   </div>
 </template>
 
@@ -210,261 +225,105 @@ async function handleEdit() {
   min-width: 0;
 }
 
-.sync-state {
-  min-height: 72px;
-  display: grid;
-  place-items: center;
-  text-align: center;
+.ios-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.sync-configured,
-.sync-unconfigured,
-.sync-intro,
-.edit-block,
-.input-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+.status-row {
+  color: var(--label-2);
+  font-size: var(--f-subhead);
+  line-height: 20px;
 }
 
-.sync-intro {
+.status-value {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
 }
 
-.sync-intro p,
-.sync-hint,
-.copy-hint {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-}
-
-.status-badge {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 32px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  border-radius: var(--radius-full);
-  color: var(--success);
-  background: var(--accent-light);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
+.dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--success);
+  background: var(--green);
 }
 
-.field-label {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
+.code {
+  overflow: hidden;
+  max-width: 160px;
+  color: var(--label-2);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.code-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+.copy {
+  flex: 0 0 auto;
+  font-size: var(--f-subhead);
 }
 
-.code-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.tint-row {
+  color: var(--tint);
 }
 
-.code-card code {
-  display: block;
-  color: var(--text-primary);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.text-action {
-  min-height: 40px;
-  padding: 0 4px;
-  border: 0;
-  color: var(--accent);
-  background: transparent;
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-.copy-button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--accent-muted);
-  border-radius: var(--radius-md);
-  color: var(--accent);
-  background: var(--accent-light);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-.copy-button svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.copy-hint {
-  color: var(--warning);
-}
-
-.error-msg {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  color: var(--danger);
-  background: var(--danger-light);
-  font-size: var(--text-sm);
-  line-height: 1.45;
-}
-
-.edit-row,
-.input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--space-sm);
-  align-items: center;
-}
-
-.input-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.text-input {
-  width: 100%;
-  min-height: 48px;
-  padding: 0 13px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  font-size: 16px;
-  outline: none;
-}
-
-.text-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-.btn {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 15px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  transition:
-    color var(--transition-fast),
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.btn:active {
-  transform: scale(0.98);
-}
-
-.btn:disabled {
-  cursor: not-allowed;
+.tint-row:disabled {
   opacity: 0.5;
 }
 
-.btn-primary {
-  border: 1px solid var(--accent);
-  color: #fff;
-  background: var(--accent);
+.join-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--f-body);
 }
 
-.btn-primary:hover,
-.btn-primary:focus-visible {
-  background: var(--accent-hover);
+.panel {
+  padding: 10px 16px 14px;
+  border-top: 0.5px solid var(--sep);
+  background: var(--fill-3);
 }
 
-.btn-outline {
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  background: transparent;
+.panel-label {
+  display: block;
+  color: var(--label-2);
+  font-size: var(--f-footnote);
+  font-weight: 600;
 }
 
-.btn-outline:hover,
-.btn-outline:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-light);
-}
-
-.primary-action {
-  width: 100%;
-}
-
-.divider {
+.panel-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+  gap: 12px;
+  margin-top: 8px;
 }
 
-.divider::before,
-.divider::after {
-  content: '';
-  height: 1px;
-  flex: 1;
-  background: var(--border-light);
+.panel-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  background: var(--bg-elevated);
+  font-size: var(--f-body);
 }
 
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+.panel-input:focus {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.ios-link.muted {
+  color: var(--label-2);
 }
 
-@media (max-width: 420px) {
-  .edit-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
+.ios-link:disabled {
+  opacity: 0.4;
+}
 
-  .edit-row .btn-outline {
-    grid-column: 2;
-  }
+.error-row {
+  color: var(--red-text);
+  font-size: var(--f-footnote);
+  line-height: 18px;
 }
 </style>
