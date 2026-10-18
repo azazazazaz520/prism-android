@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useAuth } from '../composables/useAuth';
 import { useSyncCode } from '../composables/useSyncCode';
 
@@ -21,6 +21,7 @@ const inputCode = ref('');
 const localError = ref<string | null>(null);
 const isEditing = ref(false);
 const editCode = ref('');
+const copyState = ref<'idle' | 'copied' | 'error'>('idle');
 
 onMounted(async () => {
   await restoreProfile();
@@ -30,6 +31,7 @@ onMounted(async () => {
 
 async function handleGenerate() {
   localError.value = null;
+  copyState.value = 'idle';
   try {
     const code = await generateSyncCode();
     syncCode.value = code;
@@ -50,6 +52,20 @@ async function handleJoin() {
     inputCode.value = '';
   } catch (e) {
     localError.value = pairError.value || (e as Error).message;
+  }
+}
+
+async function copySyncCode() {
+  if (!syncCode.value) return;
+  try {
+    if (!navigator.clipboard) throw new Error('clipboard-unavailable');
+    await navigator.clipboard.writeText(syncCode.value);
+    copyState.value = 'copied';
+    window.setTimeout(() => {
+      copyState.value = 'idle';
+    }, 2400);
+  } catch {
+    copyState.value = 'error';
   }
 }
 
@@ -76,6 +92,7 @@ async function handleEdit() {
     await updateSyncCode(code);
     syncCode.value = code;
     isEditing.value = false;
+    copyState.value = 'idle';
   } catch (e) {
     localError.value = pairError.value || (e as Error).message;
   }
@@ -84,98 +101,105 @@ async function handleEdit() {
 
 <template>
   <div class="sync-setup">
-    <!-- 未登录 / 初始化中 -->
-    <div v-if="!isLoggedIn" class="sync-state">
-      <p class="sync-hint" v-if="authLoading">正在初始化...</p>
-      <p class="sync-hint" v-else-if="authError">初始化失败：{{ authError }}</p>
+    <div v-if="!isLoggedIn" class="sync-state" aria-live="polite">
+      <p v-if="authLoading" class="sync-hint">正在准备安全同步…</p>
+      <p v-else-if="authError" class="error-msg">初始化失败：{{ authError }}</p>
+      <p v-else class="sync-hint">同步服务暂不可用，请稍后重试。</p>
     </div>
 
-    <!-- 已登录 -->
-    <template v-if="isLoggedIn">
-      <!-- 已配对 -->
+    <template v-else>
       <div v-if="paired" class="sync-configured">
-        <div class="sync-status">
-          <span class="status-dot"></span>
-          <span>已配对</span>
+        <div class="sync-intro">
+          <span class="status-badge"><span class="status-dot"></span>已连接</span>
+          <p>使用同一同步码的设备会共享任务的新增、完成和删除状态。</p>
         </div>
 
-        <!-- 编辑模式 -->
-        <div v-if="isEditing" class="edit-row">
-          <input
-            v-model="editCode"
-            class="text-input"
-            type="text"
-            placeholder="输入新同步码"
-            @keyup.enter="handleEdit"
-          />
-          <button class="btn btn-primary btn-sm" :disabled="isPairing" @click="handleEdit">
-            保存
-          </button>
-          <button class="btn btn-outline btn-sm" :disabled="isPairing" @click="cancelEdit">
-            取消
-          </button>
+        <div v-if="isEditing" class="edit-block">
+          <label class="field-label" for="edit-sync-code">更换同步码</label>
+          <div class="edit-row">
+            <input
+              id="edit-sync-code"
+              v-model="editCode"
+              class="text-input"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              placeholder="输入新的同步码"
+              @keyup.enter="handleEdit"
+            />
+            <button class="btn btn-primary" type="button" :disabled="isPairing" @click="handleEdit">
+              保存
+            </button>
+            <button class="btn btn-outline" type="button" :disabled="isPairing" @click="cancelEdit">
+              取消
+            </button>
+          </div>
         </div>
 
-        <!-- 展示模式 -->
-        <div v-else class="token-display">
+        <div v-else class="code-card">
+          <div class="code-heading">
+            <span class="field-label">同步码</span>
+            <button class="text-action" type="button" @click="startEdit">更换</button>
+          </div>
           <code>{{ syncCode }}</code>
-          <button class="btn-icon" title="编辑同步码" @click="startEdit">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          <button class="copy-button" type="button" @click="copySyncCode">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
+            <span>{{ copyState === 'copied' ? '已复制' : '复制同步码' }}</span>
           </button>
         </div>
 
         <p class="sync-hint">
-          在其他设备上输入此同步码即可共享任务数据。请妥善保管，丢失后无法恢复。
+          在其他设备上输入此同步码即可加入。同步码只保存在你的设备上，请妥善保管。
         </p>
-
-        <div v-if="localError" class="error-msg">{{ localError }}</div>
+        <p v-if="copyState === 'error'" class="copy-hint" aria-live="polite">
+          复制失败，请长按同步码手动复制。
+        </p>
+        <p v-if="localError" class="error-msg" role="alert">{{ localError }}</p>
       </div>
 
-      <!-- 未配对 -->
       <div v-else class="sync-unconfigured">
-        <p class="sync-hint">生成同步码后，可在其他设备输入此码完成配对，实现跨设备任务同步。</p>
+        <p class="sync-hint">先在一台设备生成同步码，再在其他设备输入同一代码完成配对。</p>
 
-        <div class="sync-actions">
-          <button class="btn btn-primary" :disabled="isPairing" @click="handleGenerate">
-            <span v-if="isPairing" class="spinner"></span>
-            <span v-else>生成同步码</span>
-          </button>
+        <button
+          class="btn btn-primary primary-action"
+          type="button"
+          :disabled="isPairing"
+          @click="handleGenerate"
+        >
+          <span v-if="isPairing" class="spinner"></span>
+          <span>{{ isPairing ? '正在连接…' : '生成同步码' }}</span>
+        </button>
+
+        <div class="divider"><span>已有同步码</span></div>
+
+        <div class="input-block">
+          <label class="field-label" for="join-sync-code">输入已有同步码</label>
+          <div class="input-row">
+            <input
+              id="join-sync-code"
+              v-model="inputCode"
+              class="text-input"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              placeholder="粘贴同步码"
+              @keyup.enter="handleJoin"
+            />
+            <button
+              class="btn btn-outline"
+              type="button"
+              :disabled="!inputCode.trim() || isPairing"
+              @click="handleJoin"
+            >
+              配对
+            </button>
+          </div>
         </div>
 
-        <div class="divider">
-          <span>或</span>
-        </div>
-
-        <div class="input-row">
-          <input
-            v-model="inputCode"
-            class="text-input"
-            type="text"
-            placeholder="输入已有同步码"
-            @keyup.enter="handleJoin"
-          />
-          <button
-            class="btn btn-outline"
-            :disabled="!inputCode.trim() || isPairing"
-            @click="handleJoin"
-          >
-            配对
-          </button>
-        </div>
-
-        <div v-if="localError" class="error-msg">{{ localError }}</div>
+        <p v-if="localError" class="error-msg" role="alert">{{ localError }}</p>
       </div>
     </template>
   </div>
@@ -183,140 +207,230 @@ async function handleEdit() {
 
 <style scoped>
 .sync-setup {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
+  min-width: 0;
 }
 
 .sync-state {
+  min-height: 72px;
+  display: grid;
+  place-items: center;
   text-align: center;
 }
 
-.sync-configured {
+.sync-configured,
+.sync-unconfigured,
+.sync-intro,
+.edit-block,
+.input-block {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
 }
 
-.sync-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.sync-intro {
+  gap: 6px;
+}
+
+.sync-intro p,
+.sync-hint,
+.copy-hint {
+  margin: 0;
+  color: var(--text-muted);
   font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.status-badge {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
   color: var(--success);
+  background: var(--accent-light);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--success);
 }
 
-.token-display {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+.field-label {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
-.token-display code {
-  flex: 1;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  word-break: break-all;
-}
-
-.edit-row {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-}
-
-.edit-row .text-input {
-  flex: 1;
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.btn-icon:hover {
-  color: var(--text-primary);
-  border-color: var(--accent);
-}
-
-.btn-sm {
-  padding: var(--space-xs) var(--space-md);
-  font-size: var(--text-xs);
-  height: 36px;
-}
-
-.sync-unconfigured {
+.code-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
 }
 
-.sync-hint {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
+.code-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-card code {
+  display: block;
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.text-action {
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.copy-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  background: var(--accent-light);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.copy-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.copy-hint {
+  color: var(--warning);
+}
+
+.error-msg {
   margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  background: var(--danger-light);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.edit-row,
+.input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-sm);
+  align-items: center;
 }
 
 .input-row {
-  display: flex;
-  gap: var(--space-sm);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .text-input {
-  flex: 1;
-  height: 40px;
-  padding: 0 var(--space-md);
+  width: 100%;
+  min-height: 48px;
+  padding: 0 13px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
+  border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  background: var(--bg-primary);
+  font-size: 16px;
   outline: none;
 }
 
 .text-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
-.error-msg {
+.btn {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
   font-size: var(--text-sm);
-  color: var(--danger);
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--danger-light);
-  border-radius: var(--radius-sm);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
-.sync-actions {
-  display: flex;
-  gap: var(--space-sm);
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-primary {
+  border: 1px solid var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  background: var(--accent-hover);
+}
+
+.btn-outline {
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.btn-outline:hover,
+.btn-outline:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.primary-action {
+  width: 100%;
 }
 
 .divider {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 10px;
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
@@ -324,47 +438,15 @@ async function handleEdit() {
 .divider::before,
 .divider::after {
   content: '';
-  flex: 1;
   height: 1px;
+  flex: 1;
   background: var(--border-light);
 }
 
-.btn {
-  padding: var(--space-sm) var(--space-lg);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.btn:active {
-  transform: scale(0.97);
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-}
-
-.btn-outline {
-  background: transparent;
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-}
-
 .spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
@@ -373,6 +455,16 @@ async function handleEdit() {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 420px) {
+  .edit-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .edit-row .btn-outline {
+    grid-column: 2;
   }
 }
 </style>
