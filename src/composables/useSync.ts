@@ -22,14 +22,30 @@ function loadOfflineQueue(): OfflineQueueItem[] {
 }
 
 function persistOfflineQueue(queue: OfflineQueueItem[]) {
+  offlineQueueCount.value = queue.length;
   localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
 }
 
 const offlineQueue: OfflineQueueItem[] = loadOfflineQueue();
+export const offlineQueueCount = ref(offlineQueue.length);
 /** 同步状态指示器 */
 const isOnline = ref(navigator.onLine);
-export const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>('idle');
+export const syncStatus = ref<'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized'>(
+  navigator.onLine ? 'idle' : 'offline',
+);
 export const lastSyncAt = ref<string | null>(null);
+
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let syncNetworkListenersBound = false;
+const RETRY_DELAY_MS = 10_000;
+
+function scheduleRetry(flush: () => Promise<void>) {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void flush();
+  }, RETRY_DELAY_MS);
+}
 
 /** 当前设备所属的 profile_id，由 useSyncCode 设置 */
 const currentProfileId = ref<string | null>(null);
@@ -40,14 +56,17 @@ const PAGE_SIZE = 500;
 export function useSync() {
   const { user, isLoggedIn } = useAuth();
 
-  window.addEventListener('online', () => {
-    isOnline.value = true;
-    flushOfflineQueue();
-  });
-  window.addEventListener('offline', () => {
-    isOnline.value = false;
-    syncStatus.value = 'offline';
-  });
+  if (!syncNetworkListenersBound) {
+    syncNetworkListenersBound = true;
+    window.addEventListener('online', () => {
+      isOnline.value = true;
+      void flushOfflineQueue();
+    });
+    window.addEventListener('offline', () => {
+      isOnline.value = false;
+      syncStatus.value = 'offline';
+    });
+  }
 
   /** 获取当前认证用户 ID */
   function userId(): string | undefined {
@@ -118,6 +137,7 @@ export function useSync() {
       if (error) throw error;
       lastSyncAt.value = new Date().toISOString();
       syncStatus.value = 'idle';
+      void flushOfflineQueue();
     } catch (e) {
       console.error('同步任务失败:', e);
       syncStatus.value = 'error';
@@ -131,6 +151,7 @@ export function useSync() {
         },
       });
       persistOfflineQueue(offlineQueue);
+      scheduleRetry(flushOfflineQueue);
     }
   }
 
@@ -163,8 +184,20 @@ export function useSync() {
       });
 
       if (error) throw error;
+      void flushOfflineQueue();
     } catch (e) {
       console.error('同步每日完成记录失败:', e);
+      offlineQueue.push({
+        type: 'upsert',
+        table: 'daily_completions',
+        data: {
+          ...(dc as unknown as Record<string, unknown>),
+          profile_id: profileId,
+          user_id: uid,
+        },
+      });
+      persistOfflineQueue(offlineQueue);
+      scheduleRetry(flushOfflineQueue);
     }
   }
 
@@ -194,6 +227,7 @@ export function useSync() {
         .eq('profile_id', profileId);
 
       if (error) throw error;
+      void flushOfflineQueue();
     } catch (e) {
       console.error('同步删除每日完成记录失败:', e);
       offlineQueue.push({
@@ -202,6 +236,7 @@ export function useSync() {
         data: { task_id: taskId, date, profile_id: profileId },
       });
       persistOfflineQueue(offlineQueue);
+      scheduleRetry(flushOfflineQueue);
     }
   }
 
@@ -344,9 +379,11 @@ export function useSync() {
     for (const item of queue) {
       try {
         if (item.type === 'delete') {
-          await supabase.from(item.table).delete().match(item.data);
+          const { error } = await supabase.from(item.table).delete().match(item.data);
+          if (error) throw error;
         } else {
-          await supabase.from(item.table).upsert(item.data);
+          const { error } = await supabase.from(item.table).upsert(item.data);
+          if (error) throw error;
         }
       } catch (e) {
         offlineQueue.push(item);
@@ -360,6 +397,7 @@ export function useSync() {
 
   return {
     syncStatus,
+    offlineQueueCount,
     isOnline,
     lastSyncAt,
     currentProfileId,
