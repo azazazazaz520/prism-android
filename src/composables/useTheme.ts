@@ -17,11 +17,25 @@ function setLocalTheme(theme: Theme) {
 /** 主题状态（全局单例 ref） */
 const currentTheme = ref<Theme>('light');
 
+function resolvedTheme(theme: Theme): 'light' | 'dark' {
+  if (theme !== 'auto') return theme;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 /** 主题 composable：管理 data-theme 属性切换与持久化 */
 export function useTheme() {
   /** 应用主题到 DOM */
   function applyTheme(theme: Theme) {
+    const activeTheme = resolvedTheme(theme);
     document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = activeTheme;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', activeTheme === 'dark' ? '#0f172a' : '#f8fafa');
+    const nativeSystemBars = (
+      window as unknown as { PrismSystemBars?: { setTheme: (value: string) => void } }
+    ).PrismSystemBars;
+    nativeSystemBars?.setTheme(activeTheme);
     currentTheme.value = theme;
   }
 
