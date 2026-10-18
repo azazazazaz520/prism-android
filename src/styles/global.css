@@ -23,8 +23,8 @@ body {
   background: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 禁止用户缩放（移动端 WebView） */
-  touch-action: manipulation;
+  /* 保留系统缩放与返回手势；仅在具体控件上消除点击延迟 */
+  touch-action: auto;
   /* 安全区域适配 */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -58,6 +58,10 @@ body {
 button,
 input {
   touch-action: manipulation;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
 }
 
 button:focus-visible,
