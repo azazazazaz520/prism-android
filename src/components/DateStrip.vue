@@ -34,6 +34,10 @@ const dates = computed(() => {
   return result;
 });
 
+function hasTasks(date: string): boolean {
+  return props.tasks.some((task) => !task.is_deleted && (task.due_date === date || task.is_daily));
+}
+
 function handleSelect(date: string) {
   if (props.selectedDate === date) {
     emit('select-date', null);
@@ -54,6 +58,7 @@ function handleSelect(date: string) {
     >
       <span class="day-name">{{ d.dayName }}</span>
       <span class="day-label">{{ d.label }}</span>
+      <span v-if="hasTasks(d.date)" class="date-dot" aria-hidden="true"></span>
     </button>
   </div>
 </template>
@@ -63,7 +68,7 @@ function handleSelect(date: string) {
   display: flex;
   gap: 7px;
   min-width: 0;
-  padding: var(--space-md) 0 var(--space-lg);
+  padding: 12px 0 8px;
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -77,9 +82,9 @@ function handleSelect(date: string) {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 64px;
-  min-height: 64px;
-  padding: 8px 10px;
+  min-width: 56px;
+  min-height: 60px;
+  padding: 7px 8px 6px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   background: var(--bg-primary);
@@ -114,6 +119,18 @@ function handleSelect(date: string) {
   font-weight: var(--font-weight-semibold);
 }
 
+.date-dot {
+  width: 5px;
+  height: 5px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.date-chip.active .date-dot {
+  background: currentColor;
+}
+
 @media (max-width: 560px) {
   .date-strip {
     gap: 6px;
@@ -121,7 +138,7 @@ function handleSelect(date: string) {
   }
 
   .date-chip {
-    min-width: 58px;
+    min-width: 54px;
     min-height: 58px;
     padding: 6px 8px;
     border-radius: var(--radius-md);

@@ -18,7 +18,6 @@ const {
   selectedTags,
   filteredTasks,
   dailyCompletionsMap,
-  loadAll,
   addTask,
   toggleTask,
   toggleDailyTask,
@@ -81,7 +80,6 @@ const progress = computed(() => {
 
 onMounted(() => {
   selectDate(today.value);
-  loadAll();
 });
 
 function setViewMode(mode: ViewMode) {
@@ -102,7 +100,6 @@ function openPlanned() {
   setViewMode('planned');
 }
 
-// 删除确认
 const showDeleteConfirm = ref(false);
 const pendingDeleteId = ref<string | null>(null);
 
@@ -120,30 +117,6 @@ function handleDeleteConfirmed() {
 function handleDeleteCancelled() {
   showDeleteConfirm.value = false;
   pendingDeleteId.value = null;
-}
-
-// 下拉刷新
-const pullDistance = ref(0);
-const isPulling = ref(false);
-let pullStartY = 0;
-
-function onPullStart(e: TouchEvent) {
-  const element = e.currentTarget as HTMLElement;
-  if (element.scrollTop > 0) return;
-  pullStartY = e.touches[0].clientY;
-  isPulling.value = true;
-}
-
-function onPullMove(e: TouchEvent) {
-  if (!isPulling.value) return;
-  const distance = e.touches[0].clientY - pullStartY;
-  if (distance > 0) pullDistance.value = Math.min(distance * 0.4, 80);
-}
-
-function onPullEnd() {
-  if (pullDistance.value > 50) loadAll();
-  pullDistance.value = 0;
-  isPulling.value = false;
 }
 
 function openComposer() {
@@ -168,20 +141,7 @@ function handleTaskAdded(
 </script>
 
 <template>
-  <div
-    class="tasks-view"
-    @touchstart.passive="onPullStart"
-    @touchmove="onPullMove"
-    @touchend="onPullEnd"
-  >
-    <div
-      class="pull-indicator"
-      :style="{ height: pullDistance + 'px', opacity: pullDistance / 50 }"
-      aria-live="polite"
-    >
-      <span>{{ pullDistance > 50 ? '松开刷新' : '下拉刷新' }}</span>
-    </div>
-
+  <div class="tasks-view">
     <div class="tasks-shell">
       <header class="workspace-header">
         <div class="header-copy">
@@ -195,29 +155,41 @@ function handleTaskAdded(
             {{ pendingCount }} 项待办<span v-if="overdueCount"> · {{ overdueCount }} 项已过期</span>
           </p>
         </div>
-        <button class="primary-button add-button" type="button" @click="openComposer">
+        <button
+          class="primary-button add-button"
+          type="button"
+          aria-label="新增任务"
+          @click="openComposer"
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span>新增任务</span>
+          <span>新增</span>
         </button>
       </header>
 
+      <section class="progress-card" aria-labelledby="progress-title">
+        <div class="progress-copy">
+          <div>
+            <span class="section-kicker">今日进度</span>
+            <h2 id="progress-title">
+              {{ completedCount }}<span>/{{ viewTasks.length }}</span> 已完成
+            </h2>
+          </div>
+          <strong class="progress-value">{{ progress }}%</strong>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <span :style="{ width: progress + '%' }"></span>
+        </div>
+      </section>
+
       <div class="view-tabs" role="tablist" aria-label="任务视图">
-        <button
-          class="view-tab"
-          :class="{ active: viewMode === 'all' }"
-          role="tab"
-          :aria-selected="viewMode === 'all'"
-          @click="setViewMode('all')"
-        >
-          全部 <span>{{ counts.all }}</span>
-        </button>
         <button
           class="view-tab"
           :class="{ active: viewMode === 'today' }"
           role="tab"
           :aria-selected="viewMode === 'today'"
+          type="button"
           @click="openToday"
         >
           今天 <span>{{ counts.today }}</span>
@@ -227,111 +199,58 @@ function handleTaskAdded(
           :class="{ active: viewMode === 'planned' }"
           role="tab"
           :aria-selected="viewMode === 'planned'"
+          type="button"
           @click="openPlanned"
         >
           计划 <span>{{ counts.planned }}</span>
         </button>
+        <button
+          class="view-tab"
+          :class="{ active: viewMode === 'all' }"
+          role="tab"
+          :aria-selected="viewMode === 'all'"
+          type="button"
+          @click="setViewMode('all')"
+        >
+          全部 <span>{{ counts.all }}</span>
+        </button>
       </div>
 
-      <div class="workspace-grid">
-        <div class="main-column">
-          <section class="surface-panel date-panel" aria-labelledby="date-panel-title">
-            <div class="panel-heading">
-              <div>
-                <span class="section-kicker">时间</span>
-                <h2 id="date-panel-title">选择日期</h2>
-              </div>
-              <button class="text-button" type="button" @click="openToday">回到今天</button>
-            </div>
-            <DateStrip :tasks="tasks" :selected-date="filterDate" @select-date="handleDateSelect" />
-          </section>
-
-          <section class="surface-panel task-panel" aria-labelledby="task-panel-title">
-            <div class="panel-heading task-heading">
-              <div>
-                <span class="section-kicker">清单</span>
-                <h2 id="task-panel-title">任务</h2>
-              </div>
-              <span class="task-count">{{ viewTasks.length }} 项</span>
-            </div>
-            <TagChipBar
-              :tags="allTags"
-              :selected="selectedTags"
-              @toggle-tag="toggleTag"
-              @add-tag="addTag"
-            />
-            <TaskList
-              :tasks="viewTasks"
-              :daily-completions-map="dailyCompletionsMap"
-              @toggle="toggleTask"
-              @toggle-daily="toggleDailyTask"
-              @update="updateTask"
-              @delete="confirmDeleteTask"
-              @update-meta="updateTaskMeta"
-            />
-          </section>
+      <section class="date-section" aria-labelledby="date-panel-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">时间</span>
+            <h2 id="date-panel-title">选择日期</h2>
+          </div>
+          <button class="text-button" type="button" @click="openToday">回到今天</button>
         </div>
+        <DateStrip :tasks="tasks" :selected-date="filterDate" @select-date="handleDateSelect" />
+      </section>
 
-        <aside class="side-column" aria-label="任务摘要">
-          <section class="surface-panel summary-card">
-            <div class="panel-heading">
-              <div>
-                <span class="section-kicker">进度</span>
-                <h2>完成情况</h2>
-              </div>
-              <strong class="progress-value">{{ progress }}%</strong>
-            </div>
-            <div class="progress-number">
-              <strong>{{ completedCount }}</strong>
-              <span>/ {{ viewTasks.length }} 项已完成</span>
-            </div>
-            <div class="progress-track" aria-hidden="true">
-              <span :style="{ width: progress + '%' }"></span>
-            </div>
-            <p class="summary-copy">
-              {{
-                viewTasks.length
-                  ? '完成一项，就离今天的重点更近一步。'
-                  : '先添加一项任务，开始安排今天。'
-              }}
-            </p>
-          </section>
-
-          <section class="surface-panel quick-card">
-            <div class="panel-heading">
-              <div>
-                <span class="section-kicker">快捷入口</span>
-                <h2>快速查看</h2>
-              </div>
-            </div>
-            <button class="quick-action" type="button" @click="openToday">
-              <span class="quick-icon today-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <rect x="3" y="5" width="18" height="16" rx="2" />
-                  <path d="M8 3v4M16 3v4M3 10h18" />
-                </svg>
-              </span>
-              <span
-                ><strong>今天</strong><small>{{ counts.today }} 项任务</small></span
-              >
-              <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-            <button class="quick-action" type="button" @click="openPlanned">
-              <span class="quick-icon plan-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
-              </span>
-              <span
-                ><strong>计划</strong><small>{{ counts.planned }} 项已安排</small></span
-              >
-              <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-          </section>
-        </aside>
-      </div>
+      <section class="task-section" aria-labelledby="task-panel-title">
+        <div class="section-heading task-heading">
+          <div>
+            <span class="section-kicker">清单</span>
+            <h2 id="task-panel-title">任务</h2>
+          </div>
+          <span class="task-count">{{ viewTasks.length }} 项</span>
+        </div>
+        <TagChipBar
+          :tags="allTags"
+          :selected="selectedTags"
+          @toggle-tag="toggleTag"
+          @add-tag="addTag"
+        />
+        <TaskList
+          :tasks="viewTasks"
+          :daily-completions-map="dailyCompletionsMap"
+          @toggle="toggleTask"
+          @toggle-daily="toggleDailyTask"
+          @update="updateTask"
+          @delete="confirmDeleteTask"
+          @update-meta="updateTaskMeta"
+        />
+      </section>
     </div>
 
     <TaskComposerSheet
@@ -356,46 +275,36 @@ function handleTaskAdded(
   min-height: 100%;
   min-width: 0;
   width: 100%;
-  padding: 0 20px 32px;
-}
-
-.pull-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  transition: height 150ms ease-out;
+  padding: 0 16px 28px;
 }
 
 .tasks-shell {
-  max-width: 1040px;
-  min-width: 0;
-  width: 100%;
+  width: min(100%, 760px);
   margin: 0 auto;
-  padding: 20px 0 40px;
+  padding: 18px 0 32px;
 }
 
 .workspace-header,
 .context-line,
-.view-tabs,
-.panel-heading,
-.progress-number,
-.quick-action {
+.progress-copy,
+.section-heading {
   display: flex;
   align-items: center;
 }
 
 .workspace-header,
-.panel-heading,
-.quick-action {
+.progress-copy,
+.section-heading {
   justify-content: space-between;
 }
 
 .workspace-header {
-  gap: 20px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.header-copy {
+  min-width: 0;
 }
 
 .context-line {
@@ -410,8 +319,8 @@ function handleTaskAdded(
 }
 
 .context-divider {
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--border-default);
 }
@@ -423,7 +332,7 @@ p {
 }
 
 h1 {
-  margin-top: 6px;
+  margin-top: 5px;
   color: var(--text-primary);
   font-size: 28px;
   font-weight: var(--font-weight-bold);
@@ -440,7 +349,7 @@ h2 {
 }
 
 .header-copy > p {
-  margin-top: 6px;
+  margin-top: 5px;
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
@@ -457,8 +366,7 @@ button:focus-visible {
 
 .primary-button,
 .text-button,
-.view-tab,
-.quick-action {
+.view-tab {
   cursor: pointer;
   transition:
     color var(--transition-fast),
@@ -469,13 +377,14 @@ button:focus-visible {
 
 .primary-button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 48px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 16px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: #fff;
   background: var(--accent);
   font-size: var(--text-sm);
@@ -487,15 +396,14 @@ button:focus-visible {
   background: var(--accent-hover);
 }
 
-.primary-button:active {
+.primary-button:active,
+.view-tab:active {
   transform: scale(0.98);
 }
 
-.primary-button svg,
-.quick-icon svg,
-.arrow-icon {
-  width: 17px;
-  height: 17px;
+.primary-button svg {
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -503,24 +411,75 @@ button:focus-visible {
   stroke-width: 1.8;
 }
 
+.progress-card {
+  padding: 14px 16px 15px;
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-lg);
+  background: var(--accent-light);
+}
+
+.progress-copy {
+  gap: 12px;
+}
+
+.section-kicker {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+}
+
+.progress-card h2 {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.progress-card h2 span {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-normal);
+}
+
+.progress-value {
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.progress-track {
+  height: 8px;
+  margin-top: 13px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 220ms var(--easing-standard);
+}
+
 .view-tabs {
+  display: flex;
   gap: 4px;
-  margin-bottom: 16px;
+  margin: 16px 0 22px;
   padding: 4px;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: var(--bg-tertiary);
 }
 
 .view-tab {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 44px;
   flex: 1;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-full);
   color: var(--text-muted);
   background: transparent;
   font-size: var(--text-sm);
@@ -545,49 +504,17 @@ button:focus-visible {
   color: var(--accent);
 }
 
-.workspace-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  align-items: start;
-  gap: 16px;
-  min-width: 0;
+.date-section {
+  margin-bottom: 22px;
 }
 
-.main-column,
-.side-column {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.surface-panel {
-  min-width: 0;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-}
-
-.date-panel,
-.task-panel,
-.summary-card,
-.quick-card {
-  padding: 16px;
-}
-
-.panel-heading {
+.section-heading {
   gap: 12px;
 }
 
-.section-kicker {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.05em;
-}
-
 .text-button {
-  min-height: 40px;
-  padding: 0 2px;
+  min-height: 44px;
+  padding: 0 4px;
   border: 0;
   color: var(--accent);
   background: transparent;
@@ -600,8 +527,16 @@ button:focus-visible {
   color: var(--accent-hover);
 }
 
+.task-section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+}
+
 .task-heading {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .task-count {
@@ -609,212 +544,37 @@ button:focus-visible {
   font-size: var(--text-xs);
 }
 
-.summary-card,
-.quick-card {
-  min-width: 0;
-}
-
-.progress-value {
-  color: var(--accent);
-  font-size: var(--text-xs);
-}
-
-.progress-number {
-  gap: 5px;
-  margin-top: 20px;
-}
-
-.progress-number strong {
-  color: var(--text-primary);
-  font-size: 26px;
-  letter-spacing: -0.04em;
-}
-
-.progress-number span {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-.progress-track {
-  height: 7px;
-  margin-top: 12px;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--bg-tertiary);
-}
-
-.progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  transition: width 220ms ease;
-}
-
-.summary-copy {
-  margin-top: 12px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-}
-
-.quick-card .panel-heading {
-  margin-bottom: 8px;
-}
-
-.quick-action {
-  width: 100%;
-  gap: 9px;
-  min-height: 56px;
-  padding: 6px 0;
-  border: 0;
-  color: var(--text-primary);
-  background: transparent;
-  text-align: left;
-}
-
-.quick-action:hover,
-.quick-action:focus-visible {
-  color: var(--accent);
-}
-
-.quick-action > span:nth-child(2) {
-  display: grid;
-  flex: 1;
-  gap: 2px;
-}
-
-.quick-action strong {
-  font-size: var(--text-xs);
-}
-
-.quick-action small {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.quick-icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  border-radius: 6px;
-}
-
-.today-icon {
-  color: var(--accent);
-  background: var(--accent-light);
-}
-
-.plan-icon {
-  color: #756a37;
-  background: #f6f0d9;
-}
-
-.quick-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.arrow-icon {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  color: var(--text-disabled);
-}
-
-@media (max-width: 760px) {
-  .workspace-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .side-column {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
+@media (min-width: 760px) {
   .tasks-view {
-    padding: 0 12px 20px;
+    padding-right: 24px;
+    padding-left: 24px;
   }
 
   .tasks-shell {
-    padding: 10px 0 16px;
+    padding-top: 24px;
+  }
+}
+
+@media (max-width: 420px) {
+  .tasks-view {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .tasks-shell {
+    padding-top: 12px;
   }
 
   .workspace-header {
-    align-items: flex-end;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 10px;
   }
 
-  .context-line {
-    gap: 6px;
-    font-size: 12px;
+  .primary-button {
+    padding: 0 13px;
   }
 
-  .add-button {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: 40px;
-    gap: 6px;
-    padding: 0 10px;
-    font-size: 13px;
-  }
-
-  h1 {
-    margin-top: 4px;
-    font-size: 24px;
-    line-height: 1.1;
-  }
-
-  .header-copy > p {
-    margin-top: 4px;
-    font-size: 13px;
-  }
-
-  .view-tabs {
-    gap: 2px;
-    margin-bottom: 12px;
-    padding: 3px;
-  }
-
-  .view-tab {
-    min-height: 36px;
-    gap: 4px;
-    font-size: 13px;
-  }
-
-  .date-panel,
-  .task-panel,
-  .summary-card,
-  .quick-card {
-    padding: 12px;
-  }
-
-  .task-panel {
-    min-height: clamp(360px, calc(100dvh - 500px), 520px);
-  }
-
-  .surface-panel {
-    border-radius: 12px;
-  }
-
-  .panel-heading {
-    gap: 8px;
-  }
-
-  h2 {
-    font-size: 16px;
-  }
-
-  .task-heading {
-    margin-bottom: 8px;
-  }
-
-  .side-column {
-    grid-template-columns: 1fr;
+  .task-section {
+    padding: 14px 12px;
   }
 }
 

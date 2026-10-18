@@ -71,52 +71,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown);
   document.removeEventListener('keydown', onKeydown);
 });
-
-// ── 左滑删除手势 ──────────────────────────
-
-const SWIPE_THRESHOLD = -80;
-const swipeState = ref<Record<string, number>>({});
-const swipeStartX = ref<Record<string, number>>({});
-const swipeStartY = ref<Record<string, number>>({});
-const swipingId = ref<string | null>(null);
-
-function onTouchStart(taskId: string, e: TouchEvent) {
-  const touch = e.touches[0];
-  // 避让 Android 系统返回手势（右边缘 20px）
-  if (touch.clientX > window.innerWidth - 20) return;
-  swipeStartX.value[taskId] = touch.clientX;
-  swipeStartY.value[taskId] = touch.clientY;
-  swipingId.value = taskId;
-}
-
-function onTouchMove(taskId: string, e: TouchEvent) {
-  if (swipingId.value !== taskId) return;
-  const touch = e.touches[0];
-  const dx = touch.clientX - (swipeStartX.value[taskId] || 0);
-  const dy = Math.abs(touch.clientY - (swipeStartY.value[taskId] || 0));
-  // 水平滑动超过垂直时，阻止页面滚动
-  if (Math.abs(dx) > dy && dx < 0) {
-    e.preventDefault();
-  }
-  // 只允许左滑（负值），限制最大偏移
-  swipeState.value[taskId] = Math.max(dx, -120);
-}
-
-function onTouchEnd(taskId: string) {
-  const offset = swipeState.value[taskId] || 0;
-  if (offset <= SWIPE_THRESHOLD) {
-    // 停留在删除位置
-    swipeState.value[taskId] = SWIPE_THRESHOLD;
-  } else {
-    // 回弹
-    swipeState.value[taskId] = 0;
-  }
-  swipingId.value = null;
-}
-
-function resetSwipe(taskId: string) {
-  swipeState.value[taskId] = 0;
-}
 </script>
 
 <template>
@@ -128,39 +82,7 @@ function resetSwipe(taskId: string) {
 
     <TransitionGroup name="task-list" tag="div" class="task-items">
       <div v-for="task in tasks" :key="task.id" class="task-row">
-        <!-- 左滑露出的删除按钮 -->
-        <button
-          class="swipe-delete-btn"
-          :class="{ visible: (swipeState[task.id] || 0) <= SWIPE_THRESHOLD }"
-          aria-label="删除任务"
-          @click="
-            emit('delete', task.id);
-            resetSwipe(task.id);
-          "
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-          </svg>
-        </button>
-
-        <div
-          class="task-card"
-          :class="{ completed: isCompleted(task), important: task.important }"
-          :style="{ transform: `translateX(${swipeState[task.id] || 0}px)` }"
-          @touchstart.passive="onTouchStart(task.id, $event)"
-          @touchmove="onTouchMove(task.id, $event)"
-          @touchend="onTouchEnd(task.id)"
-        >
+        <div class="task-card" :class="{ completed: isCompleted(task), important: task.important }">
           <!-- 勾选按钮 -->
           <button
             v-if="task.is_daily"
@@ -302,7 +224,7 @@ function resetSwipe(taskId: string) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 220px;
+  min-height: 176px;
   min-width: 0;
   width: 100%;
   padding: var(--space-2xl) var(--space-lg);
@@ -325,56 +247,28 @@ function resetSwipe(taskId: string) {
   gap: var(--space-sm);
 }
 
-/* ── 左滑容器 ──────────────────────────── */
 .task-row {
   position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-bottom: 1px solid var(--border-light);
 }
 
-.swipe-delete-btn {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--danger);
-  color: #fff;
-  border: none;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-  z-index: 0;
-}
-
-.swipe-delete-btn.visible {
-  opacity: 1;
-}
-
-.swipe-delete-btn:active {
-  background: var(--danger-hover, #dc2626);
+.task-row:last-child {
+  border-bottom: 0;
 }
 
 .task-card {
   position: relative;
-  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  min-height: 60px;
-  padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-sm);
+  min-height: 68px;
+  padding: var(--space-sm) 0;
   background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  transition: transform 0.2s ease-out;
 }
 
 .task-card.important {
+  padding-left: 8px;
   border-left: 3px solid var(--warning);
 }
 
