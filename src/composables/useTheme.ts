@@ -31,7 +31,7 @@ export function useTheme() {
     document.documentElement.style.colorScheme = activeTheme;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', activeTheme === 'dark' ? '#0f172a' : '#f8fafa');
+      ?.setAttribute('content', activeTheme === 'dark' ? '#000000' : '#f2f2f7');
     const nativeSystemBars = (
       window as unknown as { PrismSystemBars?: { setTheme: (value: string) => void } }
     ).PrismSystemBars;
