@@ -65,18 +65,19 @@ function switchTab(name: string) {
           <component :is="Component" />
         </transition>
       </router-view>
+    </main>
 
-      <Transition name="banner">
+    <Transition name="banner">
+      <div v-if="bannerVisible" class="banner-slot">
         <SyncBanner
-          v-if="bannerVisible"
           class="app-banner"
           :status="syncStatus"
           :count="offlineQueueCount"
           @retry="refreshTasks()"
           @open-settings="switchTab('settings')"
         />
-      </Transition>
-    </main>
+      </div>
+    </Transition>
 
     <nav class="tabbar" aria-label="主导航">
       <button
@@ -128,14 +129,14 @@ function switchTab(name: string) {
   overflow: hidden;
 }
 
+.banner-slot {
+  flex: 0 0 auto;
+  padding: 8px 12px 4px;
+}
+
 .app-banner {
-  position: absolute;
-  right: 12px;
-  bottom: calc(var(--tabbar-total) + 10px);
-  left: 12px;
-  z-index: 30;
-  margin: 0 auto;
   max-width: 520px;
+  margin: 0 auto;
 }
 
 .tabbar {
