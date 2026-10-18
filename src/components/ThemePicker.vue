@@ -25,6 +25,8 @@ const options: { value: 'auto' | 'light' | 'dark'; label: string; icon: string }
       :key="opt.value"
       class="theme-option"
       :class="{ active: current === opt.value }"
+      type="button"
+      :aria-pressed="current === opt.value"
       @click="emit('change', opt.value)"
     >
       <svg
