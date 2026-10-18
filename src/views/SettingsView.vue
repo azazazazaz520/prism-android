@@ -10,51 +10,51 @@ const { currentTheme, setTheme } = useTheme();
   <div class="settings-view">
     <div class="settings-shell">
       <header class="settings-header">
-        <span class="section-kicker">应用</span>
+        <span class="section-kicker">偏好</span>
         <h1>设置</h1>
-        <p>调整同步与外观，让 Prism 更适合你的工作方式。</p>
+        <p>同步、外观和应用信息都在这里。</p>
       </header>
 
-      <div class="settings-grid">
-        <section class="settings-section surface-panel">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">连接</span>
-              <h2>跨设备同步</h2>
-            </div>
+      <section class="settings-section sync-section" aria-labelledby="sync-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">连接</span>
+            <h2 id="sync-title">跨设备同步</h2>
           </div>
-          <SyncSetup />
-        </section>
+          <span class="section-note">任务数据</span>
+        </div>
+        <SyncSetup />
+      </section>
 
-        <section class="settings-section surface-panel">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">偏好</span>
-              <h2>外观</h2>
-            </div>
+      <section class="settings-section" aria-labelledby="appearance-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">偏好</span>
+            <h2 id="appearance-title">外观</h2>
           </div>
-          <ThemePicker :current="currentTheme" @change="setTheme" />
-        </section>
+          <span class="section-note">跟随系统</span>
+        </div>
+        <ThemePicker :current="currentTheme" @change="setTheme" />
+      </section>
 
-        <section class="settings-section surface-panel about-section">
-          <div class="section-heading">
-            <div>
-              <span class="section-kicker">关于</span>
-              <h2>应用信息</h2>
-            </div>
+      <section class="settings-section about-section" aria-labelledby="about-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">关于</span>
+            <h2 id="about-title">应用信息</h2>
           </div>
-          <div class="about-list">
-            <div class="about-row">
-              <span>Prism Android</span>
-              <span class="about-value">v0.1.0</span>
-            </div>
-            <div class="about-row">
-              <span>技术栈</span>
-              <span class="about-value">Tauri 2 + Vue 3 + Rust</span>
-            </div>
+        </div>
+        <dl class="about-list">
+          <div class="about-row">
+            <dt>版本</dt>
+            <dd>0.1.0</dd>
           </div>
-        </section>
-      </div>
+          <div class="about-row">
+            <dt>数据方式</dt>
+            <dd>本地优先</dd>
+          </div>
+        </dl>
+      </section>
     </div>
   </div>
 </template>
@@ -62,21 +62,21 @@ const { currentTheme, setTheme } = useTheme();
 <style scoped>
 .settings-view {
   min-height: 100%;
-  padding: 20px;
+  padding: 18px 16px 28px;
 }
 
 .settings-shell {
-  max-width: 760px;
+  width: min(100%, 760px);
   margin: 0 auto;
-  padding: 0 0 40px;
+  padding-bottom: 24px;
 }
 
 .settings-header {
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .settings-header h1 {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--text-primary);
   font-size: 28px;
   font-weight: var(--font-weight-bold);
@@ -84,7 +84,7 @@ const { currentTheme, setTheme } = useTheme();
 }
 
 .settings-header p {
-  margin-top: 6px;
+  margin-top: 5px;
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
@@ -96,38 +96,41 @@ const { currentTheme, setTheme } = useTheme();
   letter-spacing: 0.05em;
 }
 
-.settings-grid {
-  display: grid;
-  gap: 16px;
-}
-
 .settings-section {
-  padding: 16px;
+  padding: 16px 0 20px;
+  border-top: 1px solid var(--border-light);
 }
 
-.surface-panel {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
+.settings-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .section-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 h2 {
   margin: 3px 0 0;
   color: var(--text-primary);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: var(--font-weight-semibold);
   letter-spacing: -0.02em;
 }
 
+.section-note {
+  padding-top: 14px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 .about-list {
   display: grid;
+  margin: 0;
   border-top: 1px solid var(--border-light);
 }
 
@@ -142,19 +145,21 @@ h2 {
   font-size: var(--text-sm);
 }
 
-.about-value {
+.about-row dt,
+.about-row dd {
+  margin: 0;
+}
+
+.about-row dd {
   color: var(--text-muted);
   font-size: var(--text-xs);
   text-align: right;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 420px) {
   .settings-view {
-    padding: 16px 12px;
-  }
-
-  .settings-section {
-    padding: 14px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }
 </style>
