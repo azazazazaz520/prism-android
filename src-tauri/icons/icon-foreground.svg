@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g transform="translate(512 512) scale(0.7) translate(-512 -512)">
+    <g transform="translate(-38 -13)">
+      <path
+        d="M370 780V270H580A150 150 0 0 1 580 570H370"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="124"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </g>
+  </g>
+</svg>
