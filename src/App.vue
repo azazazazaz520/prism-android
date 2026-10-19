@@ -16,7 +16,7 @@ const router = useRouter();
 const route = useRoute();
 const { loadAll, refreshTasks, initSync } = useTaskStore();
 const { load: loadTheme } = useTheme();
-const { initAuth } = useAuth();
+const { initAuth, isLoggedIn, isLoading: authLoading, error: authError } = useAuth();
 
 useKeyboardViewport();
 useSystemInsets();
@@ -33,19 +33,35 @@ onMounted(async () => {
       const now = Date.now();
       if (now - lastRefresh < 5000) return;
       lastRefresh = now;
+      if (!isLoggedIn.value) void initAuth();
       refreshTasks();
     });
   }
 });
 
+/** 在线但连不上同步服务：给一次可重试的提示，而不是把错误埋在设置页 */
+const syncUnreachable = computed(
+  () => !isLoggedIn.value && !authLoading.value && !!authError.value,
+);
+
 const bannerVisible = computed(
   () =>
-    syncStatus.value === 'offline' ||
-    syncStatus.value === 'error' ||
-    syncStatus.value === 'unauthorized' ||
-    syncStatus.value === 'syncing' ||
-    offlineQueueCount.value > 0,
+    route.name !== 'settings' &&
+    (syncStatus.value === 'offline' ||
+      syncStatus.value === 'error' ||
+      syncStatus.value === 'unauthorized' ||
+      syncStatus.value === 'syncing' ||
+      syncUnreachable.value ||
+      offlineQueueCount.value > 0),
 );
+
+function handleRetry() {
+  if (syncUnreachable.value) {
+    void initAuth();
+    return;
+  }
+  refreshTasks();
+}
 
 function currentTab(): string {
   const name = route.name;
@@ -73,7 +89,8 @@ function switchTab(name: string) {
           class="app-banner"
           :status="syncStatus"
           :count="offlineQueueCount"
-          @retry="refreshTasks()"
+          :unreachable="syncUnreachable"
+          @retry="handleRetry"
           @open-settings="switchTab('settings')"
         />
       </div>

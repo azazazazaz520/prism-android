@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { useAuth } from '../composables/useAuth';
 import { useSyncCode } from '../composables/useSyncCode';
 
-const { isLoggedIn, isLoading: authLoading, error: authError } = useAuth();
+const { isLoggedIn, isLoading: authLoading, errorHint, initAuth } = useAuth();
 const {
   isPairing,
   pairError,
@@ -23,6 +23,13 @@ const localError = ref<string | null>(null);
 const isEditing = ref(false);
 const editCode = ref('');
 const copyState = ref<'idle' | 'copied' | 'error'>('idle');
+
+const authDescription = computed(() => {
+  if (authLoading.value) return '正在验证匿名会话';
+  if (errorHint.value) return errorHint.value;
+  if (!navigator.onLine) return '当前离线，任务已保存在本机';
+  return '任务已保存在本机，连接恢复后会自动重试';
+});
 
 onMounted(async () => {
   await restoreProfile();
@@ -103,15 +110,15 @@ async function handleEdit() {
 <template>
   <div class="sync-setup">
     <div v-if="!isLoggedIn" class="ios-card">
-      <p class="ios-row status-row" aria-live="polite">
-        {{
-          authLoading
-            ? '正在准备安全同步…'
-            : authError
-              ? `初始化失败：${authError}`
-              : '同步服务暂不可用，请稍后重试。'
-        }}
-      </p>
+      <div class="ios-row auth-row" aria-live="polite">
+        <span class="ios-icon warm"><AppIcon name="cloud-off" :size="17" /></span>
+        <div class="ios-row-main auth-copy">
+          <span class="auth-title">{{ authLoading ? '正在连接同步服务…' : '同步服务未连接' }}</span>
+          <span class="auth-desc">{{ authDescription }}</span>
+        </div>
+        <button v-if="!authLoading" class="ios-link" type="button" @click="initAuth()">重试</button>
+        <span v-else class="auth-spinner" aria-hidden="true"></span>
+      </div>
     </div>
 
     <template v-else>
@@ -210,12 +217,10 @@ async function handleEdit() {
       </div>
     </template>
 
-    <p v-if="isLoggedIn" class="ios-group-foot">
-      {{
-        paired
-          ? '同一同步码的设备共享任务的新增、完成与删除。'
-          : '先在一台设备生成同步码，再在其他设备输入同一代码完成配对。'
-      }}
+    <p class="ios-group-foot">
+      <template v-if="!isLoggedIn">同步失败不影响本地任务；网络恢复后会自动重试。</template>
+      <template v-else-if="paired"> 同一同步码的设备共享任务的新增、完成与删除。 </template>
+      <template v-else> 先在一台设备生成同步码，再在其他设备输入同一代码完成配对。 </template>
     </p>
   </div>
 </template>
@@ -230,10 +235,51 @@ async function handleEdit() {
   min-width: 0;
 }
 
-.status-row {
+.auth-row {
+  align-items: flex-start;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.auth-row .ios-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.auth-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+}
+
+.auth-title {
+  color: var(--label);
+  font-size: var(--f-body);
+  letter-spacing: -0.01em;
+}
+
+.auth-desc {
   color: var(--label-2);
-  font-size: var(--f-subhead);
-  line-height: 20px;
+  font-size: var(--f-footnote);
+  line-height: 18px;
+}
+
+.auth-spinner {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: 6px;
+  border: 2px solid var(--fill-1);
+  border-top-color: var(--tint);
+  border-radius: 50%;
+  animation: auth-spin 0.8s linear infinite;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .status-value {

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import AppIcon from './AppIcon.vue';
 
@@ -7,6 +7,7 @@ type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline' | 'unauthorized';
 const props = defineProps<{
   status: SyncStatus;
   count: number;
+  unreachable?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -14,13 +15,16 @@ const emit = defineEmits<{
   openSettings: [];
 }>();
 
-const mode = computed<'offline' | 'error' | 'unauthorized' | 'syncing' | null>(() => {
-  if (props.status === 'offline') return 'offline';
-  if (props.status === 'error') return 'error';
-  if (props.status === 'unauthorized') return 'unauthorized';
-  if (props.status === 'syncing' || props.count > 0) return 'syncing';
-  return null;
-});
+const mode = computed<'offline' | 'error' | 'unauthorized' | 'unreachable' | 'syncing' | null>(
+  () => {
+    if (props.status === 'offline') return 'offline';
+    if (props.status === 'unauthorized') return 'unauthorized';
+    if (props.unreachable) return 'unreachable';
+    if (props.status === 'error') return 'error';
+    if (props.status === 'syncing' || props.count > 0) return 'syncing';
+    return null;
+  },
+);
 
 const title = computed(() => {
   switch (mode.value) {
@@ -30,6 +34,8 @@ const title = computed(() => {
       return props.count ? `同步失败 · ${props.count} 项待同步` : '同步失败';
     case 'unauthorized':
       return '同步未授权';
+    case 'unreachable':
+      return '同步服务未连接';
     case 'syncing':
       return props.count ? `正在同步 ${props.count} 项更改` : '正在同步';
     default:
@@ -45,6 +51,8 @@ const description = computed(() => {
       return '点按重试，任务仍保存在本机';
     case 'unauthorized':
       return '在设置中重新配对同步码';
+    case 'unreachable':
+      return '任务已保存在本机，点按重试';
     case 'syncing':
       return '请保持网络连接';
     default:
@@ -52,9 +60,10 @@ const description = computed(() => {
   }
 });
 
-const icon = computed(() =>
-  mode.value === 'offline' ? 'cloud-off' : mode.value === 'syncing' ? 'repeat' : 'info',
-);
+const icon = computed(() => {
+  if (mode.value === 'offline' || mode.value === 'unreachable') return 'cloud-off';
+  return mode.value === 'syncing' ? 'repeat' : 'info';
+});
 
 function activate() {
   if (!mode.value) return;
@@ -114,6 +123,7 @@ function activate() {
   color: var(--orange);
 }
 
+.sync-banner.unreachable .banner-icon,
 .sync-banner.error .banner-icon {
   color: var(--red-text);
 }
