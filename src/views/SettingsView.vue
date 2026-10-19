@@ -52,14 +52,7 @@ function onScroll() {
               <span class="ios-row-main">版本</span>
               <span class="ios-value">0.1.0</span>
             </div>
-            <div class="ios-sep inset"></div>
-            <div class="ios-row">
-              <span class="ios-icon"><AppIcon name="copy" :size="17" /></span>
-              <span class="ios-row-main">数据方式</span>
-              <span class="ios-value">本地优先</span>
-            </div>
           </div>
-          <p class="ios-group-foot">Prism · 离线优先的任务应用</p>
         </section>
       </div>
     </div>
