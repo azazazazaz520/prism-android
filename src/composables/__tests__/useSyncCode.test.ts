@@ -88,6 +88,40 @@ describe('useSyncCode', () => {
     expect(mockProfileId).toBeNull();
   });
 
+  it('should report a network failure instead of an invalid sync code', async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: {
+        name: 'FunctionsFetchError',
+        message: 'Failed to send a request to the Edge Function',
+      },
+    });
+
+    const sync = useSyncCode();
+    await expect(sync.joinProfile('any-code')).rejects.toThrow('无法连接同步服务');
+    expect(sync.pairError.value).toContain('无法连接同步服务');
+    expect(mockProfileId).toBeNull();
+  });
+
+  it('should map a thrown network error to the same message', async () => {
+    mockInvoke.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const sync = useSyncCode();
+    await expect(sync.joinProfile('any-code')).rejects.toThrow('无法连接同步服务');
+    expect(mockProfileId).toBeNull();
+  });
+
+  it('should report service unavailable for server errors', async () => {
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: { name: 'FunctionsHttpError', context: { status: 503 } },
+    });
+
+    const sync = useSyncCode();
+    await expect(sync.joinProfile('any-code')).rejects.toThrow('暂时不可用');
+    expect(mockProfileId).toBeNull();
+  });
+
   it('should restore profile through the protected pairing endpoint', async () => {
     (window as any).__mockSyncCode = 'existing-code';
 

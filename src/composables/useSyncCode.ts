@@ -54,15 +54,63 @@ export function useSyncCode() {
     return call<string | null>('get_sync_code');
   }
 
+  /** 把 Edge Function 的失败区分为网络、鉴权、服务端与同步码四类，避免把网络故障说成“同步码无效”。 */
+  function describePairError(error: unknown, action: 'create' | 'join'): Error {
+    const err = error as {
+      name?: string;
+      message?: string;
+      context?: { status?: number };
+    } | null;
+    const name = err?.name ?? '';
+    const message = err?.message ?? '';
+    const status = err?.context?.status;
+
+    if (
+      name === 'FunctionsFetchError' ||
+      name === 'FunctionsRelayError' ||
+      /failed to send|failed to fetch|network|timeout|load failed/i.test(message)
+    ) {
+      return new Error('当前网络无法连接同步服务，请切换网络后重试');
+    }
+    if (status === 401 || status === 403) {
+      return new Error('同步服务未授权，请重新连接后重试');
+    }
+    if (typeof status === 'number' && status >= 500) {
+      return new Error('同步服务暂时不可用，请稍后重试');
+    }
+    if (
+      status === 400 ||
+      status === 404 ||
+      status === 409 ||
+      status === 422 ||
+      /not found|invalid|无效/i.test(message)
+    ) {
+      return new Error(
+        action === 'join' ? '同步码无效，请检查后重试' : '生成同步码失败，请稍后重试',
+      );
+    }
+    return new Error(action === 'join' ? '配对失败，请稍后重试' : '生成同步码失败，请稍后重试');
+  }
+
   /** 通过受保护的 Edge Function 创建或加入 profile，避免直接读取同步码表。 */
   async function pairProfile(action: 'create' | 'join', syncCode: string): Promise<string> {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.functions.invoke('pair-profile', {
-      body: { action, sync_code: syncCode.trim() },
-    });
+    const { data, error } = await supabase.functions
+      .invoke('pair-profile', {
+        body: { action, sync_code: syncCode.trim() },
+      })
+      .catch((e: unknown) => {
+        throw describePairError(e, action);
+      });
 
-    if (error || !data?.profile_id) {
-      throw new Error(action === 'join' ? '同步码无效，请检查后重试' : '生成同步码失败');
+    if (error) {
+      throw describePairError(error, action);
+    }
+
+    if (!data?.profile_id) {
+      throw new Error(
+        action === 'join' ? '同步码无效，请检查后重试' : '生成同步码失败，请稍后重试',
+      );
     }
 
     return data.profile_id as string;
