@@ -79,6 +79,34 @@ describe('useAuth', () => {
     expect(auth.error.value).toBe('Network error');
   });
 
+  it('should expose an actionable hint for network failures', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockSignInAnonymously.mockRejectedValue(new Error('Failed to fetch'));
+
+    const auth = await freshUseAuth();
+    await auth.initAuth();
+
+    expect(auth.error.value).toBe('Failed to fetch');
+    expect(auth.errorHint.value).toContain('无法连接同步服务');
+  });
+
+  it('should skip anonymous sign-in while offline', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    const original = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+
+    try {
+      const auth = await freshUseAuth();
+      await auth.initAuth();
+
+      expect(mockSignInAnonymously).not.toHaveBeenCalled();
+      expect(auth.isLoggedIn.value).toBe(false);
+      expect(auth.error.value).toBeNull();
+    } finally {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: original });
+    }
+  });
+
   it('should register auth state change listener', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     mockSignInAnonymously.mockResolvedValue({ data: { session: null }, error: null });

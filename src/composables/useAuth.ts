@@ -1,5 +1,6 @@
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import { createClient, type SupabaseClient, type Session, type User } from '@supabase/supabase-js';
+import { isNetworkError, withTimeout } from './syncUtils';
 
 /** 全局单例 Supabase 客户端，所有 composable 共享 */
 let supabase: SupabaseClient | null = null;
@@ -9,6 +10,11 @@ const session = ref<Session | null>(null);
 const user = ref<User | null>(null);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
+
+/** 初始化去重与监听注册状态 */
+let authPromise: Promise<void> | null = null;
+let authListenerRegistered = false;
+let onlineListenerRegistered = false;
 
 /** 获取共享的 Supabase 客户端（懒初始化） */
 export function getSupabaseClient(): SupabaseClient {
@@ -37,32 +43,66 @@ export function getSupabaseClient(): SupabaseClient {
  * JWT 由 Supabase 自动管理和刷新。
  * Session 通过 persistSession 跨应用重启持久化。
  *
- * 参考: https://supabase.com/docs/guides/auth/auth-anonymous
+ * 与桌面端一致：请求带超时、初始化去重、离线时跳过登录，
+ * 网络恢复后自动重试；失败只影响同步，不影响本地任务。
  */
 export function useAuth() {
   const isLoggedIn = computed(() => !!session.value);
 
+  /** 面向界面的提示：网络类失败给可操作的中文说明 */
+  const errorHint = computed(() => {
+    if (!error.value) return null;
+    return isNetworkError(error.value) ? '当前网络无法连接同步服务，请切换网络后重试' : error.value;
+  });
+
   /**
    * 初始化认证：恢复已有会话 → 若无则执行匿名登录
-   * 在应用启动时调用一次
+   * 并发调用会复用同一个 Promise
    */
-  async function initAuth(): Promise<void> {
-    const client = getSupabaseClient();
+  function initAuth(): Promise<void> {
+    if (authPromise) return authPromise;
+
+    authPromise = initAuthInternal().finally(() => {
+      authPromise = null;
+    });
+    return authPromise;
+  }
+
+  async function initAuthInternal(): Promise<void> {
     isLoading.value = true;
     error.value = null;
 
     try {
+      const client = getSupabaseClient();
+
+      if (!authListenerRegistered) {
+        client.auth.onAuthStateChange((_event, newSession) => {
+          session.value = newSession;
+          user.value = newSession?.user ?? null;
+        });
+        authListenerRegistered = true;
+      }
+
+      if (!onlineListenerRegistered) {
+        window.addEventListener('online', () => {
+          error.value = null;
+          if (!session.value && !isLoading.value) void initAuth();
+        });
+        onlineListenerRegistered = true;
+      }
+
       // 尝试恢复已有会话
-      const { data: sessionData } = await client.auth.getSession();
+      const { data: sessionData } = await withTimeout(client.auth.getSession());
       if (sessionData.session) {
         session.value = sessionData.session;
         user.value = sessionData.session.user;
-        isLoading.value = false;
         return;
       }
 
-      // 无会话 → 自动匿名登录
-      const { data, error: signInError } = await client.auth.signInAnonymously();
+      // 无会话 → 自动匿名登录（离线时跳过，等网络恢复后在 online 事件中重试）
+      if (!navigator.onLine) return;
+
+      const { data, error: signInError } = await withTimeout(client.auth.signInAnonymously());
       if (signInError) throw signInError;
 
       session.value = data.session;
@@ -74,12 +114,6 @@ export function useAuth() {
     } finally {
       isLoading.value = false;
     }
-
-    // 监听后续状态变化（token 刷新、登出等）
-    client.auth.onAuthStateChange((_event, newSession) => {
-      session.value = newSession;
-      user.value = newSession?.user ?? null;
-    });
   }
 
   return {
@@ -88,6 +122,7 @@ export function useAuth() {
     isLoggedIn,
     isLoading,
     error,
+    errorHint,
     initAuth,
   };
 }
